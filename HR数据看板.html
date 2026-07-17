@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HR 数据看板</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+/* ═══════════════ DESIGN TOKENS — Modern vibrant palette ═══════════════ */
+:root {
+  color-scheme: light;
+  --page:        #f0f2f5;
+  --surface:     #ffffff;
+  --surface-hover: #f5f6f8;
+  --surface-raised: #ffffff;
+  --surface-border: #dee2e9;
+  --sidebar:         #0a0e17;
+  --sidebar-hover:   #141a2a;
+  --sidebar-active:  #1c2541;
+  --sidebar-text:    #7f8a9e;
+  --sidebar-text-active: #edf2f7;
+  --sidebar-brand:   #3b82f6;
+  --sidebar-icon:    #3b82f6;
+  --shadow-sm:   0 1px 2px rgba(10,14,23,0.05), 0 1px 1px rgba(10,14,23,0.03);
+  --shadow-md:   0 4px 12px rgba(10,14,23,0.07), 0 1px 3px rgba(10,14,23,0.04);
+  --shadow-lg:   0 8px 30px rgba(10,14,23,0.10);
+  --ink:         #0f172a;
+  --ink-secondary: #475569;
+  --ink-muted:   #94a3b8;
+  --gridline:    #e2e6ef;
+  --baseline:    #cbd5e1;
+  --border:      rgba(15,23,42,0.08);
+  --s1: #2563eb;    --s2: #059669;    --s3: #d946ef;    --s4: #d97706;
+  --s5: #0d9488;    --s6: #ea580c;    --s7: #7c3aed;    --s8: #dc2626;
+  --good:    #16a34a;
+  --warning: #eab308;
+  --critical: #dc2626;
+  --delta-up:   #16a34a;
+  --delta-down: #dc2626;
+  --type-permanent: #2563eb;
+  --type-probation: #d97706;
+  --type-intern-paid: #0d9488;
+  --type-intern-unpaid: #7c3aed;
+  --type-outsource: #ea580c;
+  --grade-sa: #16a34a;
+  --grade-a:  #2563eb;
+  --grade-bp: #d97706;
+  --grade-b:  #ea580c;
+  --grade-bm: #dc2626;
+  --grade-c:  #b91c1c;
+  --grade-d:  #7f1d1d;
+  --sidebar-w: 232px;
+  --header-h: 54px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --transition: 0.2s ease;
+}
+@media(prefers-color-scheme:dark) {
+  :root:where(:not([data-theme="light"])) {
+    color-scheme: dark;
+    --page:        #0b0e14;    --surface:     #141820;
+    --surface-hover: #1a1f2a;  --surface-raised: #1e2433;
+    --surface-border: #2a3142; --sidebar:         #06080d;
+    --sidebar-hover:   #101520; --sidebar-active:  #1a2235;
+    --sidebar-text:    #646e84; --sidebar-text-active: #e2e8f0;
+    --sidebar-brand:   #3b82f6; --sidebar-icon:    #3b82f6;
+    --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);  --shadow-lg:  0 8px 30px rgba(0,0,0,0.5);
+    --ink: #e2e8f0;  --ink-secondary: #94a3b8;  --ink-muted: #646e84;
+    --gridline: #1e2433;  --baseline: #2a3142;  --border: rgba(255,255,255,0.06);
+    --s1: #3b82f6;  --s2: #10b981;  --s3: #e879f9;  --s4: #f59e0b;  --s5: #14b8a6;  --s6: #f97316;  --s7: #8b5cf6;  --s8: #ef4444;
+    --good: #22c55e;  --warning: #eab308;  --critical: #ef4444;
+    --delta-up: #22c55e;  --delta-down: #ef4444;
+    --type-permanent: #3b82f6;  --type-probation: #f59e0b;  --type-intern-paid: #14b8a6;  --type-intern-unpaid: #8b5cf6;  --type-outsource: #f97316;
+    --grade-sa: #22c55e;  --grade-a: #3b82f6;  --grade-bp: #f59e0b;  --grade-b: #f97316;  --grade-bm: #ef4444;  --grade-c: #ef4444;  --grade-d: #7f1d1d;
+  }
+}
+[data-theme="dark"] {
+  color-scheme: dark;
+  --page:        #0b0e14;    --surface:     #141820;
+  --surface-hover: #1a1f2a;  --surface-raised: #1e2433;
+  --surface-border: #2a3142; --sidebar:         #06080d;
+  --sidebar-hover:   #101520; --sidebar-active:  #1a2235;
+  --sidebar-text:    #646e84; --sidebar-text-active: #e2e8f0;
+  --sidebar-brand:   #3b82f6; --sidebar-icon:    #3b82f6;
+  --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);  --shadow-lg:  0 8px 30px rgba(0,0,0,0.5);
+  --ink: #e2e8f0;  --ink-secondary: #94a3b8;  --ink-muted: #646e84;
+  --gridline: #1e2433;  --baseline: #2a3142;  --border: rgba(255,255,255,0.06);
+  --s1: #3b82f6;  --s2: #10b981;  --s3: #e879f9;  --s4: #f59e0b;  --s5: #14b8a6;  --s6: #f97316;  --s7: #8b5cf6;  --s8: #ef4444;
+  --good: #22c55e;  --warning: #eab308;  --critical: #ef4444;
+  --delta-up: #22c55e;  --delta-down: #ef4444;
+  --type-permanent: #3b82f6;  --type-probation: #f59e0b;  --type-intern-paid: #14b8a6;  --type-intern-unpaid: #8b5cf6;  --type-outsource: #f97316;
+  --grade-sa: #22c55e;  --grade-a: #3b82f6;  --grade-bp: #f59e0b;  --grade-b: #f97316;  --grade-bm: #ef4444;  --grade-c: #ef4444;  --grade-d: #7f1d1d;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{font-size:13.5px}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;background:var(--page);color:var(--ink);line-height:1.5;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
+a{color:var(--s1);text-decoration:none}
+/* Sidebar */
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--sidebar);z-index:100;display:flex;flex-direction:column;overflow:hidden;transition:transform var(--transition);border-right:1px solid var(--surface-border)}
+.sidebar-brand{padding:18px 18px 14px;display:flex;align-items:center;gap:10px}
+.sidebar-brand .brand-icon{width:26px;height:26px;background:var(--sidebar-brand);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.92rem;font-weight:700;color:#fff;flex-shrink:0}
+.sidebar-brand .brand-text{display:flex;flex-direction:column}
+.sidebar-brand h1{font-size:.88rem;font-weight:600;color:var(--sidebar-text-active);letter-spacing:-.01em;line-height:1.3}
+.sidebar-brand .sub{font-size:.66rem;color:var(--sidebar-text)}
+.sidebar-nav{flex:1;padding:6px 8px;overflow-y:auto}
+.sidebar-nav::-webkit-scrollbar{width:4px}
+.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
+.nav-section{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sidebar-text);padding:10px 12px 3px;opacity:0.55}
+.nav-item{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-sm);color:var(--sidebar-text);font-size:.78rem;font-weight:450;cursor:pointer;transition:all .12s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.nav-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
+.nav-item.active{background:var(--sidebar-active);color:var(--sidebar-text-active);font-weight:500}
+.nav-item .nav-icon{font-size:.95rem;width:18px;text-align:center;flex-shrink:0;opacity:.7}
+.nav-item.active .nav-icon{opacity:1}
+.nav-item .badge{margin-left:auto;background:var(--critical);color:#fff;font-size:.6rem;padding:1px 6px;border-radius:10px;font-weight:600;min-width:18px;text-align:center}
+.nav-item .perf-badge{background:var(--grade-a)}
+.sidebar-footer{padding:8px 8px;border-top:1px solid rgba(255,255,255,0.06)}
+.theme-btn{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-sm);color:var(--sidebar-text);font-size:.74rem;cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left}
+.theme-btn:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
+/* Main */
+.main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
+.header{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--surface-border);background:var(--surface);flex-shrink:0;gap:12px}
+.header-left{display:flex;align-items:center;gap:10px}
+.mobile-menu-btn{background:none;border:none;font-size:1.2rem;cursor:pointer;padding:4px;color:var(--ink);display:none}
+.header-left h2{font-size:1rem;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.header-breadcrumb{font-size:.72rem;color:var(--ink-muted);padding:2px 8px;background:var(--gridline);border-radius:20px}
+.header-right{display:flex;align-items:center;gap:8px}
+.header-btn{font-size:.74rem;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--surface-border);background:var(--surface);color:var(--ink-secondary);cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:4px}
+.header-btn:hover{border-color:var(--s1);color:var(--s1)}
+.header-btn .btn-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.header-btn .btn-dot.loaded{background:var(--good)}
+.header-btn .btn-dot.empty{background:var(--ink-muted)}
+#lastUpdated{font-size:.66rem;color:var(--ink-muted)}
+.content{padding:16px 20px 40px;flex:1;max-width:1440px;width:100%}
+/* Upload */
+.upload-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 28px;border:2px dashed var(--baseline);border-radius:var(--radius-lg);background:var(--surface);cursor:pointer;transition:all .25s;text-align:center;min-height:280px;margin-bottom:14px}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--s1);background:var(--surface-hover);box-shadow:0 0 0 4px color-mix(in srgb,var(--s1) 12%,transparent)}
+.upload-zone .icon{font-size:2.8rem;line-height:1;margin-bottom:10px}
+.upload-zone h3{font-size:1.08rem;font-weight:600;margin-bottom:3px;color:var(--ink)}
+.upload-zone p{font-size:.8rem;color:var(--ink-secondary);max-width:440px;line-height:1.6}
+.upload-zone .hint{font-size:.72rem;color:var(--ink-muted);margin-top:3px}
+.upload-zone input[type="file"]{display:none}
+.upload-btn{font:inherit;padding:8px 20px;border-radius:var(--radius-md);font-size:.82rem;font-weight:500;cursor:pointer;border:none;transition:all .15s}
+.upload-btn.primary{background:var(--s1);color:#fff}
+.upload-btn.primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.upload-btn.secondary{background:var(--surface);color:var(--ink-secondary);border:1px solid var(--baseline)}
+.upload-btn.secondary:hover{border-color:var(--s1);color:var(--s1)}
+.upload-zone .file-types{margin-top:12px;display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
+.upload-zone .file-types span{padding:2px 9px;border-radius:20px;background:color-mix(in srgb,var(--s1) 10%,transparent);color:var(--s1);font-size:.68rem;font-weight:500}
+.upload-footer{margin-top:10px;display:flex;gap:12px;align-items:center;font-size:.72rem;color:var(--ink-muted);flex-wrap:wrap}
+.upload-footer .upload-divider{width:1px;height:12px;background:var(--baseline)}
+.upload-footer .upload-status{color:var(--good);display:none}
+.upload-footer .upload-status.show{display:inline}
+/* Filter bar */
+.filter-bar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface);border-radius:var(--radius-md);border:1px solid var(--surface-border);margin-bottom:8px;flex-wrap:wrap;min-height:40px}
+.filter-bar .filter-group{display:flex;align-items:center;gap:3px}
+.filter-bar label{font-size:.68rem;font-weight:500;color:var(--ink-muted);white-space:nowrap;padding:0 2px}
+.filter-bar select,.filter-bar input[type="date"]{font:inherit;font-size:.74rem;padding:3px 6px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;min-width:64px;cursor:pointer;transition:border-color .15s,box-shadow .15s;height:26px}
+.filter-bar select:focus,.filter-bar input:focus{border-color:var(--s1);box-shadow:0 0 0 3px color-mix(in srgb,var(--s1) 20%,transparent)}
+.filter-bar .filter-stat{margin-left:auto;font-size:.68rem;color:var(--ink-muted);white-space:nowrap;padding:2px 8px;background:var(--gridline);border-radius:20px}
+.filter-bar .clear-btn{border:none;background:none;color:var(--ink-muted);font-size:.72rem;cursor:pointer;padding:3px 6px;border-radius:4px;transition:all .12s}
+.filter-bar .clear-btn:hover{background:var(--gridline);color:var(--ink)}
+.filter-separator{width:1px;height:18px;background:var(--gridline);margin:0 2px}
+.filter-bar .date-sep{color:var(--ink-muted);font-size:.7rem}
+/* ═══ Alert Bar ═══ */
+.alert-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;overflow:hidden}
+.alert-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--surface-border);background:var(--surface);box-shadow:var(--shadow-sm);transition:all .25s;animation:alertSlideIn .3s ease}
+@keyframes alertSlideIn{from{opacity:0;transform:translateX(-15px)}to{opacity:1;transform:translateX(0)}}
+.alert-item.alert-critical{border-left:3px solid var(--critical);background:color-mix(in srgb,var(--critical) 6%,var(--surface))}
+.alert-item.alert-warning{border-left:3px solid var(--warning);background:color-mix(in srgb,var(--warning) 6%,var(--surface))}
+.alert-item.alert-info{border-left:3px solid var(--s1);background:color-mix(in srgb,var(--s1) 4%,var(--surface))}
+.alert-icon{font-size:1.1rem;flex-shrink:0}
+.alert-body{flex:1;min-width:0}
+.alert-title{font-size:.76rem;font-weight:600;color:var(--ink)}
+.alert-title .alert-count{font-size:.66rem;font-weight:500;color:var(--ink-muted);margin-left:5px}
+.alert-desc{font-size:.68rem;color:var(--ink-secondary);margin-top:1px;line-height:1.4}
+.alert-actions{display:flex;gap:4px;flex-shrink:0}
+.alert-goto{font-size:.66rem;padding:3px 8px;border-radius:4px;border:1px solid var(--surface-border);background:var(--surface);color:var(--s1);cursor:pointer;transition:all .12s}
+.alert-goto:hover{background:var(--s1);color:#fff;border-color:var(--s1)}
+.alert-close{font-size:.7rem;padding:3px 7px;border-radius:4px;border:none;background:transparent;color:var(--ink-muted);cursor:pointer;transition:all .12s}
+.alert-close:hover{background:var(--gridline);color:var(--ink)}
+/* KPI */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px}
+.kpi-card{background:var(--surface);border-radius:var(--radius-md);padding:12px 14px;border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition),transform var(--transition);cursor:default;position:relative;overflow:hidden}
+.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
+.kpi-card .kpi-label{font-size:.66rem;font-weight:500;color:var(--ink-muted);letter-spacing:.01em}
+.kpi-card .kpi-value{font-size:1.5rem;font-weight:650;line-height:1.2;letter-spacing:-.02em;color:var(--ink)}
+.kpi-card .kpi-sub{font-size:.68rem;color:var(--ink-secondary);margin-top:1px}
+.kpi-card .kpi-accent{position:absolute;top:0;left:0;width:3px;height:100%;border-radius:0 2px 2px 0}
+.kpi-card.accent-s1 .kpi-accent{background:var(--s1)}
+.kpi-card.accent-s2 .kpi-accent{background:var(--s2)}
+.kpi-card.accent-s4 .kpi-accent{background:var(--s4)}
+.kpi-card.accent-s5 .kpi-accent{background:var(--s5)}
+.kpi-card.accent-s6 .kpi-accent{background:var(--s6)}
+.kpi-card.accent-s8 .kpi-accent{background:var(--s8)}
+.kpi-card.accent-grade-sa .kpi-accent{background:var(--grade-sa)}
+.kpi-card.accent-grade-a .kpi-accent{background:var(--grade-a)}
+/* Charts */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:10px;margin-bottom:10px}
+.chart-grid.tight{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
+.chart-card{background:var(--surface);border-radius:var(--radius-md);padding:14px 16px 10px;border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition)}
+.chart-card:hover{box-shadow:var(--shadow-md)}
+.chart-card .chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.chart-card .chart-header h3{font-size:.78rem;font-weight:600;color:var(--ink)}
+.chart-card .chart-header .chart-badge{font-size:.64rem;color:var(--ink-muted);background:var(--gridline);padding:1px 7px;border-radius:10px}
+.chart-card .chart-wrap{position:relative;width:100%;height:240px}
+.chart-card .chart-wrap.tall{height:290px}
+.chart-card .chart-wrap canvas{width:100% !important;height:100% !important}
+.chart-card.full{grid-column:1 / -1}
+/* Table */
+.raw-section{margin-top:10px}
+.raw-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px}
+.raw-header h3{font-size:.78rem;font-weight:600;color:var(--ink)}
+.raw-header .raw-controls{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
+.raw-header input[type="text"]{font:inherit;font-size:.74rem;padding:3px 6px 3px 24px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;width:160px;transition:border-color .15s,width .2s}
+.raw-header input[type="text"]:focus{border-color:var(--s1);width:200px;box-shadow:0 0 0 3px color-mix(in srgb,var(--s1) 20%,transparent)}
+.raw-header select{font:inherit;font-size:.72rem;padding:3px 5px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:24px}
+.search-wrap{position:relative}
+.search-wrap .search-icon{position:absolute;left:7px;top:50%;transform:translateY(-50%);font-size:.66rem;color:var(--ink-muted);pointer-events:none}
+.data-table-wrap{overflow-x:auto;max-height:380px;overflow-y:auto;border-radius:var(--radius-sm);border:1px solid var(--gridline);background:var(--surface)}
+.data-table-wrap table{width:100%;border-collapse:collapse;font-size:.72rem}
+.data-table-wrap th{position:sticky;top:0;background:var(--surface-hover);padding:5px 7px;text-align:left;font-weight:600;border-bottom:2px solid var(--baseline);color:var(--ink-secondary);white-space:nowrap;z-index:2;font-size:.68rem}
+.data-table-wrap td{padding:4px 7px;border-bottom:1px solid var(--gridline);white-space:nowrap;color:var(--ink)}
+.data-table-wrap tr:last-child td{border-bottom:none}
+.data-table-wrap tr:hover td{background:color-mix(in srgb,var(--s1) 6%,transparent)}
+/* Tags */
+.tag{display:inline-block;padding:1px 6px;border-radius:10px;font-size:.64rem;font-weight:500;line-height:1.5}
+.tag-active{background:color-mix(in srgb,var(--good) 12%,transparent);color:var(--good)}
+.tag-inactive{background:color-mix(in srgb,var(--critical) 12%,transparent);color:var(--critical)}
+.tag-permanent{background:color-mix(in srgb,var(--type-permanent) 10%,transparent);color:var(--type-permanent)}
+.tag-probation{background:color-mix(in srgb,var(--type-probation) 12%,transparent);color:var(--type-probation)}
+.tag-intern-paid{background:color-mix(in srgb,var(--type-intern-paid) 10%,transparent);color:var(--type-intern-paid)}
+.tag-intern-unpaid{background:color-mix(in srgb,var(--type-intern-unpaid) 10%,transparent);color:var(--type-intern-unpaid)}
+.tag-outsource{background:color-mix(in srgb,var(--type-outsource) 10%,transparent);color:var(--type-outsource)}
+.tag-grade-sa{background:color-mix(in srgb,var(--grade-sa) 12%,transparent);color:var(--grade-sa)}
+.tag-grade-a{background:color-mix(in srgb,var(--grade-a) 12%,transparent);color:var(--grade-a)}
+.tag-grade-bp{background:color-mix(in srgb,var(--grade-bp) 12%,transparent);color:var(--grade-bp)}
+.tag-grade-b{background:color-mix(in srgb,var(--grade-b) 12%,transparent);color:var(--grade-b)}
+.tag-grade-bm{background:color-mix(in srgb,var(--grade-bm) 12%,transparent);color:var(--grade-bm)}
+.tag-grade-c{background:color-mix(in srgb,var(--grade-c) 12%,transparent);color:var(--grade-c)}
+.tag-grade-d{background:color-mix(in srgb,var(--grade-d) 12%,transparent);color:var(--grade-d)}
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 16px;color:var(--ink-muted);text-align:center}
+.empty-state .icon{font-size:1.8rem;margin-bottom:5px;opacity:0.4}
+.hidden{display:none !important}
+.fade-in{animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+@media(max-width:900px){
+  .sidebar{transform:translateX(-100%);box-shadow:none}
+  .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,0.3)}
+  .main{margin-left:0} .content{padding:10px}
+  .header{padding:0 10px} .mobile-menu-btn{display:block}
+  .chart-grid,.chart-grid.tight{grid-template-columns:1fr}
+  .kpi-row{grid-template-columns:repeat(2,1fr)}
+  .filter-bar{flex-direction:column;align-items:stretch;gap:5px}
+  .filter-bar .filter-stat{margin-left:0}
+  .filter-bar .filter-group{flex-wrap:wrap}
+  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99}
+  .mobile-overlay.open{display:block}
+  .header-right .header-btn span{display:none}
+}
+@media(min-width:901px){
+  .mobile-overlay{display:none !important}
+  .mobile-menu-btn{display:none !important}
+}
+</style>
+</head>
+<body>
+<div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()"></div>
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <div class="brand-icon">HR</div>
+    <div class="brand-text"><h1>HR 数据看板</h1><div class="sub" id="sidebarSub">数据驱动人力决策</div></div>
+  </div>
+  <div class="sidebar-nav">
+    <div class="nav-section">核心视图</div>
+    <button class="nav-item active" data-page="overview" onclick="switchPage('overview')"><span class="nav-icon">📊</span> 总览<span class="badge" id="alertBadge" style="display:none">0</span></button>
+    <button class="nav-item" data-page="structure" onclick="switchPage('structure')"><span class="nav-icon">🏗️</span> 组织架构</button>
+    <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')"><span class="nav-icon">👥</span> 人员构成</button>
+    <button class="nav-item" data-page="turnover" onclick="switchPage('turnover')"><span class="nav-icon">🔄</span> 人员流动<span class="badge" id="leaverBadge">0</span></button>
+    <div class="nav-section">数据分析</div>
+    <button class="nav-item" data-page="performance" onclick="switchPage('performance')"><span class="nav-icon">⭐</span> 绩效评估<span class="badge perf-badge" id="perfBadge" style="display:none">i</span></button>
+    <button class="nav-item" data-page="employment" onclick="switchPage('employment')"><span class="nav-icon">📋</span> 用工类型</button>
+    <div class="nav-section">人才发展</div>
+    <button class="nav-item" data-page="talent" onclick="switchPage('talent')"><span class="nav-icon">📈</span> 人才发展</button>
+    <button class="nav-item" data-page="health" onclick="switchPage('health')"><span class="nav-icon">🏛️</span> 职级健康度</button>
+    <div class="nav-section">员工数据</div>
+    <button class="nav-item" data-page="employee" onclick="switchPage('employee')"><span class="nav-icon">📋</span> 员工明细</button>
+  </div>
+  <div class="sidebar-footer">
+    <button class="theme-btn" onclick="toggleTheme()"><span>🌓</span> <span id="themeLabel">深色模式</span></button>
+  </div>
+</nav>
+<div class="main">
+  <header class="header">
+    <div class="header-left">
+      <button class="mobile-menu-btn" onclick="toggleSidebar()">☰</button>
+      <h2 id="pageTitle">总览</h2>
+      <span class="header-breadcrumb" id="pageBreadcrumb">核心指标一览</span>
+    </div>
+    <div class="header-right">
+      <span style="font-size:.7rem;color:var(--ink-muted)" id="perfCount"></span>
+      <button class="header-btn" onclick="uploadPerfData()"><span class="btn-dot empty" id="perfDot"></span><span>上传绩效</span></button>
+      <span id="lastUpdated"></span>
+    </div>
+  </header>
+  <div class="content" id="mainContent">
+    <div id="uploadSection">
+      <div class="upload-zone" id="uploadZone">
+        <div class="icon">📊</div>
+        <h3>HR 数据看板</h3>
+        <p>将 <strong>KPA 格式 Excel</strong> 文件拖拽到此处，或点击下方按钮选择数据文件夹</p>
+        <p class="hint">支持 .xlsx / .xls · 将 KPA 和绩效 Excel 放在同一文件夹，一次性加载</p>
+        <div class="folder-btn-wrap" style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
+          <button class="upload-btn primary" onclick="document.getElementById('folderPicker').click()">📁 选择数据文件夹</button>
+          <button class="upload-btn secondary" onclick="document.getElementById('fileInput').click()">📄 选择单个文件</button>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
+        <input type="file" id="folderPicker" webkitdirectory accept=".xlsx,.xls" style="display:none">
+        <div class="upload-footer">
+          <span class="upload-status" id="uploadPerfStatus">已上传绩效数据</span>
+          <span class="upload-divider"></span>
+          <span>首次加载后，可将所有 Excel 放进同一文件夹，下次双击 HTML 直接选文件夹</span>
+        </div>
+      </div>
+    </div>
+    <div id="dashboard" class="hidden">
+      <!-- ═══ FILTER BAR ═══ -->
+      <div class="filter-bar" id="filterBar">
+        <div class="filter-group"><label>状态</label><select id="filterStatus" onchange="onFilterChange('status')"><option value="all">全部</option><option value="在职">在职</option><option value="离职">离职</option></select></div>
+        <div class="filter-separator"></div>
+        <div class="filter-group"><label>中心</label><select id="filterCenter" onchange="onFilterChange('center')"></select></div>
+        <div class="filter-separator"></div>
+        <div class="filter-group"><label>部门</label><select id="filterDept" onchange="onFilterChange('dept')"><option value="all">全部</option></select></div>
+        <div class="filter-separator"></div>
+        <div class="filter-group"><label>用工类型</label><select id="filterType" onchange="onFilterChange('type')"><option value="all">全部</option></select></div>
+        <div class="filter-separator"></div>
+        <div class="filter-group"><label>入职日期</label><input type="date" id="filterDateFrom" onchange="onFilterChange('date')"><span class="date-sep">—</span><input type="date" id="filterDateTo" onchange="onFilterChange('date')"></div>
+        <button class="clear-btn" onclick="resetFilters()">✕ 重置</button>
+        <span class="filter-stat" id="filterStat"></span>
+      </div>
+
+      <!-- ═══ ALERT BAR ═══ -->
+      <div class="alert-bar" id="alertBar" style="display:none"></div>
+
+      <!-- ═══ PAGE: Overview ═══ -->
+      <div class="page" id="page-overview">
+        <div class="kpi-row" id="kpiRow"></div>
+        <div class="chart-grid">
+          <div class="chart-card full">
+            <div class="chart-header"><h3 id="hcTitle">编制分布</h3><span class="chart-badge" id="hcCount"></span></div>
+            <div class="chart-wrap tall"><canvas id="chartHeadcount"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-header"><h3>月度入离职趋势</h3><span class="chart-badge">近 12 个月</span></div>
+            <div class="chart-wrap tall"><canvas id="chartTurnoverTrend"></canvas></div>
+          </div>
+          <div class="chart-card">
+            <div class="chart-header"><h3>用工类型构成</h3><span class="chart-badge" id="typeCount"></span></div>
+            <div class="chart-wrap"><canvas id="chartEmpType"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Structure ═══ -->
+      <div class="page hidden" id="page-structure">
+        <div class="kpi-row" id="structureKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>职级分布 · 按中心</h3><span class="chart-badge" id="levelCount"></span></div><div class="chart-wrap tall"><canvas id="chartLevel"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>职级 × 子等级矩阵</h3><span class="chart-badge">深色 = 人数多</span></div><div class="chart-wrap tall"><canvas id="chartLevelMatrix"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>各部门人数</h3><span class="chart-badge">Top 15</span></div><div class="chart-wrap"><canvas id="chartDept"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>岗位序列分布</h3></div><div class="chart-wrap"><canvas id="chartSeries"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Demographics ═══ -->
+      <div class="page hidden" id="page-demographics">
+        <div class="chart-grid tight">
+          <div class="chart-card"><div class="chart-header"><h3>年龄分布</h3></div><div class="chart-wrap"><canvas id="chartAge"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>司龄分布</h3></div><div class="chart-wrap"><canvas id="chartTenure"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>学历构成</h3></div><div class="chart-wrap"><canvas id="chartEdu"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>性别比例</h3></div><div class="chart-wrap"><canvas id="chartGender"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>司龄 × 学历交叉分析</h3></div><div class="chart-wrap tall"><canvas id="chartTenureEdu"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Turnover ═══ -->
+      <div class="page hidden" id="page-turnover">
+        <div class="kpi-row" id="turnoverKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>离职分析 · 按职级</h3></div><div class="chart-wrap tall"><canvas id="chartLeaverLevel"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>离职分析 · 按司龄段</h3></div><div class="chart-wrap tall"><canvas id="chartLeaverTenure"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>离职分析 · 按用工类型</h3></div><div class="chart-wrap"><canvas id="chartLeaverType"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>招聘来源分析</h3></div><div class="chart-wrap"><canvas id="chartSource"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Performance ═══ -->
+      <div class="page hidden" id="page-performance">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <div class="filter-group" style="display:flex;align-items:center;gap:4px">
+            <label style="font-size:.68rem;font-weight:500;color:var(--ink-muted)">评估周期</label>
+            <select id="perfPeriod" onchange="onPerfPeriodChange()" style="font:inherit;font-size:.74rem;padding:3px 6px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:26px">
+              <option value="finalGrade">2026H1 终评</option>
+              <option value="initGrade">2026H1 初评</option>
+              <option value="grade2025Y">2025年终</option>
+              <option value="grade2025M">2025年中</option>
+              <option value="grade2024Y">2024年终</option>
+              <option value="grade2024M">2024年中</option>
+            </select>
+          </div>
+          <span style="font-size:.68rem;color:var(--ink-muted)" id="perfPeriodTip">切换周期查看历史绩效分布</span>
+        </div>
+        <div class="kpi-row" id="perfKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3 id="perfGradeTitle">终评绩效等级分布</h3><span class="chart-badge" id="perfGradeCount"></span></div><div class="chart-wrap"><canvas id="chartPerfGradeDist"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>绩效等级 × 职级交叉分析</h3><span class="chart-badge">深色 = 人数多</span></div><div class="chart-wrap tall"><canvas id="chartPerfLevelMatrix"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>投入系数分布</h3><span class="chart-badge">工时投入</span></div><div class="chart-wrap"><canvas id="chartInputCoeff"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>绩效变动分析</h3><span class="chart-badge">升/降/持平</span></div><div class="chart-wrap"><canvas id="chartPerfChange"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>历史绩效趋势</h3><span class="chart-badge">2024中 → 2026H1</span></div><div class="chart-wrap tall"><canvas id="chartPerfTrend"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Employment ═══ -->
+      <div class="page hidden" id="page-employment">
+        <div class="kpi-row" id="empKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>各中心用工类型分布</h3></div><div class="chart-wrap tall"><canvas id="chartEmpTypeByCenter"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>用工类型 × 职级分布</h3></div><div class="chart-wrap tall"><canvas id="chartEmpTypeLevel"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>组织类型分布</h3></div><div class="chart-wrap"><canvas id="chartOrgType"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Talent ═══ -->
+      <div class="page hidden" id="page-talent">
+        <div class="kpi-row" id="talentKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>职级晋升通道</h3><span class="chart-badge">当前在职人数分布</span></div><div class="chart-wrap tall"><canvas id="chartPromoChannel"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>高绩效人才分布</h3><span class="chart-badge">SA+A 级</span></div><div class="chart-wrap tall"><canvas id="chartHighPerf"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>梯队建设</h3><span class="chart-badge">后备人才</span></div><div class="chart-wrap tall"><canvas id="chartTierType"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>核心人才留存风险</h3><span class="chart-badge">高绩效/高司龄</span></div><div class="chart-wrap tall"><canvas id="chartRetentionRisk"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Title Health ═══ -->
+      <div class="page hidden" id="page-health">
+        <div class="kpi-row" id="healthKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))"></div>
+        <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>职级金字塔</h3><span class="chart-badge">T/P 序列</span></div><div class="chart-wrap tall"><canvas id="chartPyramid"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>管理 vs 技术通道</h3><span class="chart-badge">双通道分布</span></div><div class="chart-wrap tall"><canvas id="chartChannel"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>各中心职级分布对比</h3></div><div class="chart-wrap tall"><canvas id="chartCenterLevel"></canvas></div></div>
+        </div>
+      </div>
+
+      <!-- ═══ PAGE: Employee Detail ═══ -->
+      <div class="page hidden" id="page-employee">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+          <h3 style="font-size:.82rem;font-weight:600">📋 员工明细</h3>
+          <span style="font-size:.68rem;color:var(--ink-muted)" id="empTableCount"></span>
+        </div>
+        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+          <div class="search-wrap">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="empSearch" placeholder="搜索姓名/编号/部门..." oninput="debounceSearch(renderEmployeeTable, 200)" style="font:inherit;font-size:.74rem;padding:3px 6px 3px 24px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;width:180px;transition:border-color .15s">
+          </div>
+          <button class="header-btn" onclick="exportEmployeeTable()">📥 导出CSV</button>
+          <button class="header-btn" onclick="clearAllColumnFilters()" style="margin-left:auto">✕ 清除筛选</button>
+          <span style="font-size:.68rem;color:var(--ink-muted)" id="empFilterHint"></span>
+        </div>
+        <div id="empAlertBanner" style="width:100%"></div>
+        <div id="filterPopup" style="display:none;position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--baseline);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);min-width:180px;max-width:300px;max-height:360px;overflow-y:auto;font-size:.72rem;padding-bottom:0"></div>
+        <div class="data-table-wrap" id="empTableWrap" style="max-height:600px"></div>
+      </div>
+
+      <!-- ═══ DATA TABLE (shared) ═══ -->
+      <div class="raw-section" id="rawSection">
+        <div class="raw-header">
+          <h3 id="tableTitle">📋 员工明细</h3>
+          <div class="raw-controls">
+            <span style="font-size:.68rem;color:var(--ink-muted)" id="tableCount"></span>
+            <select id="tableFilterCol" onchange="renderTable()" title="筛选字段">
+              <option value="all">全部</option>
+              <option value="center">按中心</option>
+              <option value="dept">按部门</option>
+              <option value="level">按职级</option>
+              <option value="status">按状态</option>
+            </select>
+            <select id="tableFilterVal" onchange="renderTable()" style="display:none"></select>
+            <div class="search-wrap">
+              <span class="search-icon">🔍</span>
+              <input type="text" id="searchInput" placeholder="搜索..." oninput="renderTable()">
+            </div>
+          </div>
+        </div>
+        <div class="data-table-wrap" id="tableWrap"></div>
+      </div>
+    </div><!-- /dashboard -->
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<script src="hr-core.js"></script>
+<script src="hr-render.js"></script>
+<script src="hr-table.js"></script>
+<script src="hr-alerts.js"></script>
+<script src="hr-data.js"></script>
+<script>console.log('📊 HR 数据看板 v5 — 预警系统 + 完整员工明细 + 代码拆分');</script>
+</body>
+</html>
