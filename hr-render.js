@@ -18,12 +18,19 @@ function renderKpiCards(active, allActive, allLeavers) {
     const turnoverRate = totalAll>0 ? (recentLeavers/totalAll*100) : 0;
     const tenures = active.map(d=>calcTenure(d.joinDate)).filter(Boolean);
     const avgTenure = tenures.length>0 ? (tenures.reduce((a,b)=>a+b,0)/tenures.length) : 0;
+    // 近12月净增 & 新员工离职率（专业 HR 指标）
+    const joins12 = allActive.filter(d=>d.joinDate && new Date(d.joinDate)>=yearAgo).length;
+    const newLeavers12 = allLeavers.filter(d=>d.joinDate && d.leaveDate && new Date(d.joinDate)>=yearAgo).length;
+    const netAdd12 = joins12 - recentLeavers;
+    const newHireTurnover = joins12>0 ? (newLeavers12/joins12*100) : 0;
     cards = kpi('在职总人数',total,`全部中心`,'s1');
     centers.forEach(c => {
       const cnt = active.filter(d=>d.center===c).length;
       cards += kpi(c,cnt,`占比 ${total>0?(cnt/total*100).toFixed(1):0}%`,'s1');
     });
-    cards += kpi('12月滚动离职率',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人离职`,'s8') +
+    cards += kpi('滚动离职率（近12月）',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人离职`,'s8') +
+      kpi('近12月净增',netAdd12>=0?`+${netAdd12}`:netAdd12,`${joins12} 入职 − ${recentLeavers} 离职`,'s1') +
+      kpi('新员工离职率',`${newHireTurnover.toFixed(1)}%`,`近12月入职 ${joins12} 人`,'s5') +
       kpi('平均司龄',`${avgTenure.toFixed(1)}年`,`共 ${total} 名在职`,'s5');
   } else if(centerFilter !== 'all' && deptFilter === 'all') {
     const cnt = centerFilter;
@@ -40,7 +47,7 @@ function renderKpiCards(active, allActive, allLeavers) {
     cards = kpi(`${cnt} 在职人数`,cntCount,`全中心`,'s1') +
       kpi('部门数',depts,`覆盖 ${cntCount} 人`,'s5') +
       kpi('职级数',levels,`含子等级`,'s4') +
-      kpi('12月离职率',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人离职`,'s8') +
+      kpi('近12月离职率',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人离职`,'s8') +
       kpi('平均司龄',`${avgTenure.toFixed(1)}年`,`共 ${cntCount} 人`,'s5');
   } else if(deptFilter !== 'all') {
     const now = new Date();
@@ -54,7 +61,7 @@ function renderKpiCards(active, allActive, allLeavers) {
     cards = kpi(`${deptFilter}`,total,`在职人数`,'s1') +
       kpi('职级覆盖',levels,`个职级`,'s4') +
       kpi('平均司龄',`${avgTenure.toFixed(1)}年`,'','s5') +
-      kpi('离职率',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人`,'s8');
+      kpi('近12月离职率',`${turnoverRate.toFixed(1)}%`,`${recentLeavers} 人`,'s8');
   }
   document.getElementById('kpiRow').innerHTML = cards;
 }
@@ -98,7 +105,7 @@ function renderOverview(active, allActive, allLeavers, tc) {
   const joins = countByMonth(filteredActive, 'joinDate', months);
   const leaves = countByMonth(filteredLeavers, 'leaveDate', months);
   lineChart('chartTurnoverTrend', months, [
-    {label:'入职', data:joins, color:tc.s5},
+    {label:'入职', data:joins, color:tc.s3},
     {label:'离职', data:leaves, color:tc.s8},
   ]);
 
@@ -152,12 +159,12 @@ function renderStructure(active, tc) {
   const depts = Object.keys(deptCountMap).filter(Boolean);
   depts.sort((a,b)=>(deptCountMap[b]||0)-(deptCountMap[a]||0));
   const deptData2 = depts.map(d=>deptCountMap[d]);
-  const deptColors = depts.map((_,i)=>[tc.s1,tc.s5,tc.s4,tc.s6,tc.s7,tc.s3,tc.s8,tc.s2][i%8]);
-  if(depts.length) barChart('chartDept', depts.slice(0,15), [{label:'人数',data:deptData2.slice(0,15), color:(ctx)=>deptColors[ctx.dataIndex%deptColors.length]}]);
+  // dataviz: 单序列排名图用单一主色，不再每柱一色
+  if(depts.length) barChart('chartDept', depts.slice(0,15), [{label:'人数',data:deptData2.slice(0,15), color:tc.s1}]);
 
   const series = countBy(active, 'series');
   const seriesLabels = Object.keys(series).filter(Boolean).sort();
-  if(seriesLabels.length) barChart('chartSeries', seriesLabels, [{label:'人数',data:seriesLabels.map(l=>series[l]), color:[tc.s1,tc.s4,tc.s5,tc.s6,tc.s7]}]);
+  if(seriesLabels.length) barChart('chartSeries', seriesLabels, [{label:'人数',data:seriesLabels.map(l=>series[l]), color:tc.s1}]);
 }
 
 /* ── DEMOGRAPHICS ── */
@@ -217,10 +224,50 @@ function renderTurnover(leavers, allActive, tc) {
   const avgLeaverTenure = leaverTenures.length>0 ? (leaverTenures.reduce((a,b)=>a+b,0)/leaverTenures.length) : 0;
 
   document.getElementById('turnoverKpiRow').innerHTML =
-    kpi('累计离职',filteredLeavers.length,`历史总计`,'s8') +
-    kpi('近12月离职',recent12,`${recent12} 人`,'s6') +
+    kpi('历史累计离职',filteredLeavers.length,`范围内总计`,'s8') +
+    kpi('近12月离职',recent12,`滚动 12 个月`,'s6') +
     kpi('离职率',`${turnoverRate.toFixed(1)}%`,`占全部 ${totalEver} 人`,'s8') +
-    kpi('离职平均司龄',`${avgLeaverTenure.toFixed(1)}年`,`从入职到离职`,'s4');
+    kpi('离职员工平均司龄',`${avgLeaverTenure.toFixed(1)}年`,`从入职到离职`,'s4');
+
+  // ── 新增：分月离职率（当月离职 / 月末在册，近12月）──
+  const months = getMonthsList(relevantRaw, 12);
+  const monthlyTurnover = months.map(m => {
+    const start = new Date(m + '-01');
+    const end = new Date(start.getFullYear(), start.getMonth() + 1, 1);
+    const endMs = end.getTime() - 1;
+    const inMonth = d => { const t = new Date(d); return !isNaN(t.getTime()) && t.getTime() >= start.getTime() && t.getTime() <= endMs; };
+    const joinedByEnd = d => { const t = new Date(d); return !isNaN(t.getTime()) && t.getTime() <= endMs; };
+    const leaversThisMonth = filteredLeavers.filter(d => inMonth(d.leaveDate)).length;
+    const headcountAtEnd = relevantActive.filter(d => joinedByEnd(d.joinDate)).length
+      + filteredLeavers.filter(d => joinedByEnd(d.joinDate) && d.leaveDate && new Date(d.leaveDate) > end).length;
+    return headcountAtEnd > 0 ? +(leaversThisMonth / headcountAtEnd * 100).toFixed(2) : null;
+  });
+  lineChart('chartMonthlyTurnover', months, [{label:'月度离职率', data:monthlyTurnover, color:tc.s8}], {
+    spanGaps: true,
+    scales: {
+      x: CHART_DEFAULTS.scales.x,
+      y: { ...CHART_DEFAULTS.scales.y, ticks: {...CHART_DEFAULTS.scales.y.ticks, callback: v => v + '%'} },
+    },
+  });
+
+  // ── 新增：近12个月入职 · 按用工类型（堆积柱图）──
+  const jTypes = ['已转正','试用期','签约实习生','非签约实习生','外包人员'];
+  const jColors = [tc.typePerm, tc.typeProb, tc.typePaid, tc.typeUnpaid, tc.typeOut];
+  const jDataByType = jTypes.map(t => countByMonth(relevantRaw.filter(d => d.empType === t), 'joinDate', months));
+  const jLabels = jTypes.filter((t, i) => jDataByType[i].some(v => v > 0));
+  if(jLabels.length) {
+    barChart('chartJoinByType', months, jLabels.map(t => ({
+      label: t,
+      data: jDataByType[jTypes.indexOf(t)],
+      color: jColors[jTypes.indexOf(t)],
+      borderRadius: 0,
+    })), {
+      scales: {
+        x: {...CHART_DEFAULTS.scales.x, stacked: true},
+        y: {...CHART_DEFAULTS.scales.y, stacked: true},
+      },
+    });
+  } else { destroyChart('chartJoinByType'); }
 
   const byLevel = countBy(filteredLeavers, 'level');
   const lvLabels = sortBy(Object.keys(byLevel).filter(k=>k!=='未知'), LEVEL_ORDER);
@@ -230,7 +277,7 @@ function renderTurnover(leavers, allActive, tc) {
   const ltBins = ['<3月','3-6月','6-12月','1-2年','2-5年','5年+'];
   const ltCounts = [0,0,0,0,0,0];
   filteredLeavers.forEach(d=>{if(!d.joinDate||!d.leaveDate)return; const m=(new Date(d.leaveDate)-new Date(d.joinDate))/(30*86400000); if(m<3)ltCounts[0]++;else if(m<6)ltCounts[1]++;else if(m<12)ltCounts[2]++;else if(m<24)ltCounts[3]++;else if(m<60)ltCounts[4]++;else ltCounts[5]++;});
-  barChart('chartLeaverTenure', ltBins, [{label:'离职人数',data:ltCounts, color:tc.s6}]);
+  barChart('chartLeaverTenure', ltBins, [{label:'离职人数',data:ltCounts, color:tc.s8}]);
 
   const byType = countBy(filteredLeavers, 'empType');
   const typeLabels = ['已转正','试用期','签约实习生','非签约实习生','外包人员'];
@@ -244,7 +291,7 @@ function renderTurnover(leavers, allActive, tc) {
 
   const src = countBy(filteredLeavers, 'source');
   const srcLabels = Object.keys(src).filter(Boolean);
-  if(srcLabels.length) barChart('chartSource', srcLabels, [{label:'人数',data:srcLabels.map(l=>src[l]), color:tc.s4}]);
+  if(srcLabels.length) barChart('chartSource', srcLabels, [{label:'人数',data:srcLabels.map(l=>src[l]), color:tc.s1}]);
   else destroyChart('chartSource');
 }
 
@@ -319,7 +366,8 @@ function renderPerfKpiAndCharts(active, tc) {
   perfActive.forEach(d=>{const b=d.perfInputBracket; if(b&&bracketOrder.includes(b)) bracketMap[b]=(bracketMap[b]||0)+1;});
   const bracketLabels = bracketOrder.filter(b=>bracketMap[b]);
   const bracketData = bracketLabels.map(b=>bracketMap[b]);
-  if(bracketLabels.length) barChart('chartInputCoeff', bracketLabels, [{label:'人数',data:bracketData, color:(ctx)=>[tc.s6,tc.s4,tc.s1,tc.s2][ctx.dataIndex%4]}]);
+  // dataviz: 强调最高投入区间（X≥145%），其余 muted 灰，避免彩虹色
+  if(bracketLabels.length) barChart('chartInputCoeff', bracketLabels, [{label:'人数',data:bracketData, color:(ctx)=>ctx.dataIndex === bracketLabels.length-1 ? tc.s1 : tc.inkMuted}]);
   else destroyChart('chartInputCoeff');
 
   // Performance change
@@ -338,7 +386,10 @@ function renderPerfKpiAndCharts(active, tc) {
     return vals.length>0 ? vals.reduce((a,b)=>a+b,0)/vals.length : 0;
   });
   lineChart('chartPerfTrend', histLabels, [{label:'平均绩效(分值)', data:avgByPeriod, color:tc.s1}], {
-    scales: { y: { ...CHART_DEFAULTS.scales.y, min:0, max:5, beginAtZero:false } },
+    scales: {
+      x: CHART_DEFAULTS.scales.x,
+      y: { ...CHART_DEFAULTS.scales.y, min:0, max:5, beginAtZero:false },
+    },
   });
 }
 
@@ -351,11 +402,18 @@ function renderEmployment(active, tc) {
   const perm = empType['已转正']||0; const trial = empType['试用期']||0;
   const intern = (empType['签约实习生']||0)+(empType['非签约实习生']||0);
   const outsource = empType['外包人员']||0;
+  // 新增专业指标：试用期平均入职时长（天）、实习生占比
+  const trialEmployees = active.filter(d => d.empType === '试用期');
+  const trialDays = trialEmployees.map(d => { const t = new Date(d.joinDate); return isNaN(t.getTime()) ? null : Math.round((Date.now() - t.getTime()) / 86400000); }).filter(v => v !== null);
+  const avgTrialDays = trialDays.length ? Math.round(trialDays.reduce((a,b)=>a+b,0)/trialDays.length) : 0;
+  const internPct = active.length>0 ? (intern/active.length*100) : 0;
   document.getElementById('empKpiRow').innerHTML =
     kpi('已转正',perm,`${active.length>0?(perm/active.length*100).toFixed(1):0}%`,'s1') +
     kpi('试用期',trial,`${active.length>0?(trial/active.length*100).toFixed(1):0}%`,'s4') +
     kpi('实习生',intern,`签约+非签约`,'s5') +
-    kpi('外包人员',outsource,`${active.length>0?(outsource/active.length*100).toFixed(1):0}%`,'s6');
+    kpi('外包人员',outsource,`${active.length>0?(outsource/active.length*100).toFixed(1):0}%`,'s6') +
+    kpi('试用期平均入职时长',avgTrialDays>0?`${avgTrialDays}天`:'—',`当前 ${trialEmployees.length} 名试用期员工`,'s4') +
+    kpi('实习生占比',`${internPct.toFixed(1)}%`,`占在职 ${active.length} 人`,'s5');
 
   const centers = [...new Set(active.map(d=>d.center).filter(Boolean))].sort();
   const centerTypeMap = {};
@@ -375,7 +433,7 @@ function renderEmployment(active, tc) {
 
   const org = countBy(active, 'orgType');
   const orgLabels = Object.keys(org).filter(Boolean);
-  if(orgLabels.length) barChart('chartOrgType', orgLabels, [{label:'人数',data:orgLabels.map(l=>org[l]), color:(ctx)=>[tc.s1,tc.s5,tc.s4,tc.s6][ctx.dataIndex%4]}]);
+  if(orgLabels.length) barChart('chartOrgType', orgLabels, [{label:'人数',data:orgLabels.map(l=>org[l]), color:tc.s1}]);
   else destroyChart('chartOrgType');
 }
 
@@ -455,12 +513,13 @@ function renderHealth(active, tc) {
 
   const techPLevels = sortBy(Object.keys(levelDist).filter(k=>k!=='未知'&&(k.startsWith('T')||k.startsWith('P'))), LEVEL_ORDER);
   if(techPLevels.length) {
-    barChart('chartPyramid', techPLevels, [{label:'人数',data:techPLevels.map(l=>levelDist[l]), color:(ctx)=>[tc.s1,tc.s5,tc.s4,tc.s6][ctx.dataIndex%4]}]);
+    // dataviz: 单序列等级金字塔用单一主色
+    barChart('chartPyramid', techPLevels, [{label:'人数',data:techPLevels.map(l=>levelDist[l]), color:tc.s1}]);
   } else destroyChart('chartPyramid');
 
   const channelLabels = ['技术', '管理', '专业/营销/职能'];
   const channelData = [tSeries, mSeries, pSeries];
-  barChart('chartChannel', channelLabels, [{label:'人数',data:channelData, color:(ctx)=>[tc.s1,tc.s8,tc.s5][ctx.dataIndex%3]}]);
+  barChart('chartChannel', channelLabels, [{label:'人数',data:channelData, color:(ctx)=>[tc.s1,tc.s8,tc.s6][ctx.dataIndex%3]}]);
 
   const centerLevelDist = {};
   centers.forEach(c => { centerLevelDist[c] = countBy(active.filter(d=>d.center===c), 'level'); });
