@@ -30,7 +30,7 @@
     if (!xlsxFiles.length) return;
 
     let pending = xlsxFiles.length;
-    let foundKpa = false;
+    let foundEmpData = false;
     let perfCount = 0;
 
     for (const fileName of xlsxFiles) {
@@ -39,19 +39,19 @@
         if (!resp.ok) continue;
         const buf = await resp.arrayBuffer();
         const wb = XLSX.read(new Uint8Array(buf), {type:'array', cellDates:false});
-        let isKpa = false;
+        let isEmpData = false;
 
-        // Try as KPA employee data
+        // 尝试识别为员工数据
         for (const name of wb.SheetNames) {
           const ws = wb.Sheets[name];
           const json = XLSX.utils.sheet_to_json(ws, {raw:true, defval:''});
           if (json && json.length >= 3) {
             const rows = json.map(parseRow).filter(d => d.id && d.name);
             if (rows.length > 0) {
-              isKpa = true;
-              if (!foundKpa) {
+              isEmpData = true;
+              if (!foundEmpData) {
                 rawData = rows;
-                foundKpa = true;
+                foundEmpData = true;
               } else {
                 const existingIds = new Set(rawData.map(d => d.id));
                 for (const r of rows) {
@@ -64,7 +64,7 @@
         }
 
         // Try as performance data
-        if (!isKpa || fileName.toLowerCase().includes('绩效') || fileName.toLowerCase().includes('perf')) {
+        if (!isEmpData || fileName.toLowerCase().includes('绩效') || fileName.toLowerCase().includes('perf')) {
           const nc = parsePerfWorkbook(wb);
           if (nc > 0) { perfCount += nc; perfFileLoaded = true; }
         }
@@ -73,14 +73,14 @@
       }
       pending--;
       if (pending === 0) {
-        if (foundKpa) {
+        if (foundEmpData) {
           if (perfCount > 0) {
             perfFileCount += perfCount;
             document.getElementById('perfDot').className = 'btn-dot loaded';
             document.getElementById('perfBadge').style.display = 'inline';
             document.getElementById('uploadPerfStatus').classList.add('show');
             document.getElementById('uploadPerfStatus').textContent = `已加载 ${perfCount} 条绩效记录`;
-            document.getElementById('perfCount').textContent = `📁 ${perfCount} 条绩效`;
+            document.getElementById('perfCount').textContent = `绩效数据 ${perfCount} 条`;
             attachPerfData();
           }
           onDataLoaded();
@@ -96,7 +96,7 @@
   });
 })();
 
-/* ── UPLOAD — KPA file ── */
+/* ── UPLOAD — 员工数据文件 ── */
 const uploadZone = document.getElementById('uploadZone');
 const fileInput = document.getElementById('fileInput');
 const folderPicker = document.getElementById('folderPicker');
@@ -121,7 +121,7 @@ function handleFolderFiles(files) {
   if(!xlsxFiles.length) { alert('文件夹中未找到 Excel 文件'); return; }
 
   let pending = xlsxFiles.length;
-  let foundKpa = false;
+  let foundEmpData = false;
   let perfCount = 0;
 
   for(const file of xlsxFiles) {
@@ -131,21 +131,21 @@ function handleFolderFiles(files) {
       try {
         const buf = new Uint8Array(ev.target.result);
         const wb = XLSX.read(buf, {type:'array', cellDates:false});
-        let isKpa = false;
+        let isEmpData = false;
 
-        // Try as KPA employee data first
+        // 优先尝试识别为员工数据
         for(const name of wb.SheetNames) {
           const ws = wb.Sheets[name];
           const json = XLSX.utils.sheet_to_json(ws, {raw:true, defval:''});
           if(json && json.length >= 3) {
             const rows = json.map(parseRow).filter(d => d.id && d.name);
             if(rows.length > 0) {
-              isKpa = true;
-              if(!foundKpa) {
+              isEmpData = true;
+              if(!foundEmpData) {
                 rawData = rows;
-                foundKpa = true;
+                foundEmpData = true;
               } else {
-                // Merge additional KPA data (avoid duplicates by id)
+                // 合并多份员工数据（按工号去重）
                 const existingIds = new Set(rawData.map(d => d.id));
                 for(const r of rows) {
                   if(!existingIds.has(r.id)) { rawData.push(r); existingIds.add(r.id); }
@@ -156,22 +156,22 @@ function handleFolderFiles(files) {
           }
         }
 
-        // If not KPA (or has perf indicators in name), try as performance data
-        if(!isKpa || file.name.toLowerCase().includes('绩效') || file.name.toLowerCase().includes('perf')) {
+        // 若非员工数据（或文件名含绩效标识），尝试作为绩效数据
+        if(!isEmpData || file.name.toLowerCase().includes('绩效') || file.name.toLowerCase().includes('perf')) {
           const nc = parsePerfWorkbook(wb);
           if(nc > 0) { perfCount += nc; perfFileLoaded = true; }
         }
       } catch(err) { console.error('读取失败:', file.name, err.message); }
       pending--;
       if(pending === 0) {
-        if(foundKpa) {
+        if(foundEmpData) {
           if(perfCount > 0) {
             perfFileCount += perfCount;
             document.getElementById('perfDot').className = 'btn-dot loaded';
             document.getElementById('perfBadge').style.display = 'inline';
             document.getElementById('uploadPerfStatus').classList.add('show');
             document.getElementById('uploadPerfStatus').textContent = `已加载 ${perfCount} 条绩效记录`;
-            document.getElementById('perfCount').textContent = `📁 ${perfCount} 条绩效`;
+            document.getElementById('perfCount').textContent = `绩效数据 ${perfCount} 条`;
             attachPerfData();
           }
           onDataLoaded();
@@ -212,7 +212,7 @@ function parseRow(row) {
     const key = FIELD_MAP[ch] || ch;
     r[key] = val;
   }
-  // 合并重复列组的数据（KPA 导出有多组重复列，SheetJS 加 _1~_5 后缀）
+  // 合并重复列组的数据（导出的多组重复列，SheetJS 加 _1~_5 后缀）
   if(!r.prevEmployer) {
     for(let i=1;i<=5;i++) { const v = r['原工作单位#_'+i]; if(v) { r.prevEmployer=v; break; } }
   }
@@ -269,7 +269,7 @@ function uploadPerfData() {
           document.getElementById('perfBadge').style.display = 'inline';
           document.getElementById('uploadPerfStatus').classList.add('show');
           document.getElementById('uploadPerfStatus').textContent = `已加载 ${perfFileCount} 条绩效记录`;
-          document.getElementById('perfCount').textContent = `📁 ${perfFileCount} 条绩效`;
+          document.getElementById('perfCount').textContent = `绩效数据 ${perfFileCount} 条`;
           attachPerfData();
           if(rawData.length) { refreshAll(); if(!document.getElementById('page-performance').classList.contains('hidden')) renderPerfTable(); }
         }
@@ -487,14 +487,14 @@ function switchPage(name) {
   document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.page===name));
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('hidden', p.id !== `page-${name}`));
   const titles = {
-    overview:'总览',structure:'组织架构',demographics:'人员构成',
+    overview:'总览',structure:'组织架构',demographics:'人员结构',
     turnover:'人员流动',performance:'绩效评估',employment:'用工类型',
     talent:'人才发展',health:'职级健康度',employee:'员工明细'
   };
   const subtitles = {
-    overview:'核心指标一览',structure:'部门与职级结构',demographics:'年龄·学历·性别',
-    turnover:'入离职分析',performance:'绩效考评分析',employment:'编制与用工分析',
-    talent:'晋升·留存·梯队',health:'职级健康·双通道',employee:'完整人员信息表'
+    overview:'核心人力指标一览',structure:'部门与职级结构',demographics:'年龄·学历·性别构成',
+    turnover:'入离职与流动分析',performance:'绩效评估与分析',employment:'用工类型与编制分析',
+    talent:'晋升通道与梯队建设',health:'职级结构与通道健康',employee:'完整员工信息明细'
   };
   document.getElementById('pageTitle').textContent = titles[name]||name;
   document.getElementById('pageBreadcrumb').textContent = subtitles[name]||'';

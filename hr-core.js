@@ -107,17 +107,18 @@ function destroyChart(id) { if(chartInstances[id]) { chartInstances[id].destroy(
 let CHART_DEFAULTS = {
   responsive: true, maintainAspectRatio: false,
   interaction: { mode:'index', intersect:false },
+  layout:{ padding:{ top:6, right:4, bottom:0, left:0 } },
   plugins: {
     legend: { position:'bottom', labels:{padding:10,usePointStyle:true,pointStyle:'circle',
       font:{size:10},boxWidth:6,boxHeight:6} },
     tooltip: {
       backgroundColor:'#fff', titleColor:'#0f172a', bodyColor:'#475569',
-      borderColor:'#e2e6ef', borderWidth:1, padding:8, cornerRadius:6,
-      boxPadding:4, usePointStyle:true },
+      borderColor:'#e2e6ef', borderWidth:1, padding:10, cornerRadius:8,
+      boxPadding:4, usePointStyle:true, titleFont:{weight:'600'} },
   },
   scales: {
-    x: { grid:{display:false}, ticks:{font:{size:10}}, border:{color:'#e2e6ef'} },
-    y: { beginAtZero:true, grid:{lineWidth:1}, ticks:{font:{size:10}}, border:{display:false} },
+    x: { grid:{display:false}, ticks:{font:{size:10},padding:4}, border:{display:false} },
+    y: { beginAtZero:true, grid:{lineWidth:1}, ticks:{font:{size:10},padding:4}, border:{display:false} },
   },
 };
 
@@ -141,8 +142,13 @@ function barChart(id, labels, datasets, opts) {
   const ds = datasets.map((d,i) => ({
     label: d.label, data: d.data,
     backgroundColor: d.color || COLORS[i%COLORS.length],
-    borderWidth: 0, borderRadius: 3,
-    barPercentage: d.barPercentage||0.6, categoryPercentage: d.categoryPercentage||0.8,
+    borderWidth: 0,
+    borderRadius: d.borderRadius !== undefined
+      ? d.borderRadius
+      : {topLeft:4, topRight:4, bottomLeft:0, bottomRight:0},
+    borderSkipped: false,
+    barPercentage: d.barPercentage||0.62, categoryPercentage: d.categoryPercentage||0.82,
+    maxBarThickness: 42,
   }));
   chartInstances[id] = new Chart(ctx, {
     type:'bar', data:{labels,datasets:ds},
@@ -184,7 +190,7 @@ function doughnutChart(id, labels, data, colors) {
   chartInstances[id] = new Chart(ctx, {
     type:'doughnut', data:{labels, datasets:[{data, backgroundColor:colors, borderWidth:2, borderColor:tc.surface}]},
     options: {
-      responsive:true, maintainAspectRatio:false, cutout:'60%',
+      responsive:true, maintainAspectRatio:false, cutout:'62%',
       plugins: {
         legend: { position:'bottom', labels:{padding:8,usePointStyle:true,pointStyle:'circle',font:{size:10}} },
         tooltip: {
@@ -196,6 +202,64 @@ function doughnutChart(id, labels, data, colors) {
       },
     },
   });
+}
+
+/* ── CHART EXPORT (PNG) ── */
+function exportChartPng(canvasId, title) {
+  const canvas = document.getElementById(canvasId);
+  const chart = chartInstances[canvasId];
+  if(!canvas || !chart) return;
+  try {
+    const tc = getThemeColors();
+    const w = canvas.width, h = canvas.height;
+    // 用临时画布垫一层表面色，避免透明背景
+    const off = document.createElement('canvas');
+    off.width = w; off.height = h;
+    const octx = off.getContext('2d');
+    octx.fillStyle = tc.surface;
+    octx.fillRect(0, 0, w, h);
+    octx.drawImage(canvas, 0, 0, w, h);
+    const a = document.createElement('a');
+    a.href = off.toDataURL('image/png');
+    a.download = ((title||canvasId).replace(/[\/\\:*?"<>|]/g,'')) + '.png';
+    document.body.appendChild(a); a.click(); a.remove();
+    showToast('已导出图表：' + (title||canvasId));
+  } catch(e) { console.error('导出 PNG 失败:', e); }
+}
+
+/* 页面加载后自动给每个图表卡片注入导出按钮 */
+function injectChartExportButtons() {
+  document.querySelectorAll('.chart-card').forEach(card => {
+    if(card.querySelector('.chart-export-btn')) return;
+    const canvas = card.querySelector('canvas');
+    const header = card.querySelector('.chart-header');
+    if(!canvas || !header) return;
+    const btn = document.createElement('button');
+    btn.className = 'chart-export-btn';
+    btn.type = 'button';
+    btn.title = '导出为 PNG 图片';
+    btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5M16.5 12L12 16.5m0 0L7.5 12m4.5 4.5V3"/></svg>';
+    btn.addEventListener('click', () => {
+      const title = header.querySelector('h3') ? header.querySelector('h3').textContent.trim() : canvas.id;
+      exportChartPng(canvas.id, title);
+    });
+    header.appendChild(btn);
+  });
+}
+
+/* ── TOAST ── */
+let toastTimer = null;
+function showToast(msg, isError) {
+  let el = document.getElementById('appToast');
+  if(!el) {
+    el = document.createElement('div');
+    el.id = 'appToast';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  el.className = isError ? 'error show' : 'show';
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { el.classList.remove('show'); }, 2200);
 }
 
 /* ── DATA HELPERS ── */
@@ -247,4 +311,11 @@ function buildDeptPairs() {
 function getDeptLabel(en) {
   const found = deptPairs.find(p => p.en === en);
   return found && found.cn && found.cn !== found.en ? `${found.en} (${found.cn})` : en;
+}
+
+/* ── INIT: 注入图表导出按钮 ── */
+if(document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', injectChartExportButtons);
+} else {
+  injectChartExportButtons();
 }

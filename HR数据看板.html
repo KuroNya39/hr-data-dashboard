@@ -3,265 +3,429 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="HR 人力数据看板 — 上传 Excel 数据，浏览器本地可视化分析人员结构、绩效、流动与用工。">
 <title>HR 数据看板</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232a78d6'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='700' fill='white' text-anchor='middle' font-family='sans-serif'%3EHR%3C/text%3E%3C/svg%3E">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
-/* ═══════════════ DESIGN TOKENS — Modern vibrant palette ═══════════════ */
+/* ═══════════════ DESIGN TOKENS — 现代专业风 · 深蓝单主色 · 暖中性灰 ═══════════════ */
 :root {
   color-scheme: light;
-  --page:        #f0f2f5;
-  --surface:     #ffffff;
-  --surface-hover: #f5f6f8;
+  /* Surfaces — 暖中性灰 */
+  --page:          #f5f5f1;
+  --surface:       #ffffff;
+  --surface-hover: #f7f6f3;
   --surface-raised: #ffffff;
-  --surface-border: #dee2e9;
-  --sidebar:         #0a0e17;
-  --sidebar-hover:   #141a2a;
-  --sidebar-active:  #1c2541;
-  --sidebar-text:    #7f8a9e;
-  --sidebar-text-active: #edf2f7;
-  --sidebar-brand:   #3b82f6;
-  --sidebar-icon:    #3b82f6;
-  --shadow-sm:   0 1px 2px rgba(10,14,23,0.05), 0 1px 1px rgba(10,14,23,0.03);
-  --shadow-md:   0 4px 12px rgba(10,14,23,0.07), 0 1px 3px rgba(10,14,23,0.04);
-  --shadow-lg:   0 8px 30px rgba(10,14,23,0.10);
-  --ink:         #0f172a;
-  --ink-secondary: #475569;
-  --ink-muted:   #94a3b8;
-  --gridline:    #e2e6ef;
-  --baseline:    #cbd5e1;
-  --border:      rgba(15,23,42,0.08);
-  --s1: #2563eb;    --s2: #059669;    --s3: #d946ef;    --s4: #d97706;
-  --s5: #0d9488;    --s6: #ea580c;    --s7: #7c3aed;    --s8: #dc2626;
-  --good:    #16a34a;
-  --warning: #eab308;
-  --critical: #dc2626;
-  --delta-up:   #16a34a;
-  --delta-down: #dc2626;
-  --type-permanent: #2563eb;
-  --type-probation: #d97706;
-  --type-intern-paid: #0d9488;
-  --type-intern-unpaid: #7c3aed;
-  --type-outsource: #ea580c;
-  --grade-sa: #16a34a;
-  --grade-a:  #2563eb;
-  --grade-bp: #d97706;
-  --grade-b:  #ea580c;
-  --grade-bm: #dc2626;
-  --grade-c:  #b91c1c;
-  --grade-d:  #7f1d1d;
-  --sidebar-w: 232px;
-  --header-h: 54px;
+  --surface-border: #e5e4de;
+  --gridline:      #eae9e4;
+  --baseline:      #d0cfc7;
+  /* Ink */
+  --ink:           #1c1b17;
+  --ink-secondary: #57554d;
+  --ink-muted:     #8b887e;
+  /* Sidebar — 深炭蓝 */
+  --sidebar:          #12151d;
+  --sidebar-hover:    #1a1f2b;
+  --sidebar-active:   #222a3b;
+  --sidebar-text:     #6d768e;
+  --sidebar-text-active: #eef1f7;
+  --sidebar-icon:     #8b94ac;
+  /* 品牌主色（单一强调色） */
+  --accent:        #2a78d6;
+  --accent-strong: #1e5cb4;
+  --accent-soft:   rgba(42,120,214,0.10);
+  /* 图表分类色板 — dataviz 校验 8 槽（明） */
+  --s1: #2a78d6;  --s2: #eb6834;  --s3: #1baf7a;  --s4: #eda100;
+  --s5: #e87ba4;  --s6: #008300;  --s7: #4a3aa7;  --s8: #e34948;
+  /* 状态色（与分类色板区分） */
+  --good:     #0ca30c;
+  --warning:  #d98508;
+  --critical: #d03b3b;
+  /* 用工类型语义色 */
+  --type-permanent:    #2a78d6;
+  --type-probation:    #eda100;
+  --type-intern-paid:  #1baf7a;
+  --type-intern-unpaid:#4a3aa7;
+  --type-outsource:    #eb6834;
+  /* 绩效等级色 — 阶梯（好→差） */
+  --grade-sa: #1a7f37;  --grade-a: #2a78d6;  --grade-bp: #b57907;
+  --grade-b:  #d97a1f;  --grade-bm: #c2402f; --grade-c:  #9c2f1f;
+  --grade-d:  #7a1f12;
+  --delta-up:   #0ca30c;
+  --delta-down: #d03b3b;
+  /* 阴影 — 带暖调投影 */
+  --shadow-sm: 0 1px 2px rgba(40,35,25,0.04), 0 1px 1px rgba(40,35,25,0.03);
+  --shadow-md: 0 2px 6px rgba(40,35,25,0.05), 0 10px 28px rgba(40,35,25,0.07);
+  --shadow-lg: 0 6px 16px rgba(40,35,25,0.07), 0 20px 48px rgba(40,35,25,0.11);
+  /* 圆角 */
   --radius-sm: 6px;
-  --radius-md: 8px;
-  --radius-lg: 12px;
-  --transition: 0.2s ease;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --transition: 0.18s ease;
+  --sidebar-w: 236px;
+  --header-h: 56px;
 }
 @media(prefers-color-scheme:dark) {
   :root:where(:not([data-theme="light"])) {
     color-scheme: dark;
-    --page:        #0b0e14;    --surface:     #141820;
-    --surface-hover: #1a1f2a;  --surface-raised: #1e2433;
-    --surface-border: #2a3142; --sidebar:         #06080d;
-    --sidebar-hover:   #101520; --sidebar-active:  #1a2235;
-    --sidebar-text:    #646e84; --sidebar-text-active: #e2e8f0;
-    --sidebar-brand:   #3b82f6; --sidebar-icon:    #3b82f6;
-    --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);  --shadow-lg:  0 8px 30px rgba(0,0,0,0.5);
-    --ink: #e2e8f0;  --ink-secondary: #94a3b8;  --ink-muted: #646e84;
-    --gridline: #1e2433;  --baseline: #2a3142;  --border: rgba(255,255,255,0.06);
-    --s1: #3b82f6;  --s2: #10b981;  --s3: #e879f9;  --s4: #f59e0b;  --s5: #14b8a6;  --s6: #f97316;  --s7: #8b5cf6;  --s8: #ef4444;
-    --good: #22c55e;  --warning: #eab308;  --critical: #ef4444;
-    --delta-up: #22c55e;  --delta-down: #ef4444;
-    --type-permanent: #3b82f6;  --type-probation: #f59e0b;  --type-intern-paid: #14b8a6;  --type-intern-unpaid: #8b5cf6;  --type-outsource: #f97316;
-    --grade-sa: #22c55e;  --grade-a: #3b82f6;  --grade-bp: #f59e0b;  --grade-b: #f97316;  --grade-bm: #ef4444;  --grade-c: #ef4444;  --grade-d: #7f1d1d;
+    --page:          #0e0e0c;
+    --surface:       #171714;
+    --surface-hover: #1e1d19;
+    --surface-raised: #20201b;
+    --surface-border: #2a2a25;
+    --gridline:      #262622;
+    --baseline:      #3a3a33;
+    --ink:           #f1f0eb;
+    --ink-secondary: #a9a79e;
+    --ink-muted:     #6f6e65;
+    --sidebar:          #0a0c11;
+    --sidebar-hover:    #141925;
+    --sidebar-active:   #1c2436;
+    --sidebar-text:     #5b647d;
+    --sidebar-text-active: #eef1f7;
+    --sidebar-icon:     #79829c;
+    --accent:        #3987e5;
+    --accent-strong: #5a9ef0;
+    --accent-soft:   rgba(57,135,229,0.14);
+    --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;
+    --s5: #d55181;  --s6: #008300;  --s7: #9085e9;  --s8: #e66767;
+    --good: #0ca30c;  --warning: #fab219;  --critical: #e25454;
+    --type-permanent:    #3987e5;
+    --type-probation:    #c98500;
+    --type-intern-paid:  #199e70;
+    --type-intern-unpaid:#9085e9;
+    --type-outsource:    #d95926;
+    --grade-sa: #22c55e;  --grade-a: #3987e5;  --grade-bp: #e3a008;
+    --grade-b:  #ea8a2a;  --grade-bm: #e25454; --grade-c:  #b9433a;
+    --grade-d:  #8c2a20;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+    --shadow-md: 0 2px 8px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35);
+    --shadow-lg: 0 6px 18px rgba(0,0,0,0.45), 0 20px 50px rgba(0,0,0,0.4);
   }
 }
 [data-theme="dark"] {
   color-scheme: dark;
-  --page:        #0b0e14;    --surface:     #141820;
-  --surface-hover: #1a1f2a;  --surface-raised: #1e2433;
-  --surface-border: #2a3142; --sidebar:         #06080d;
-  --sidebar-hover:   #101520; --sidebar-active:  #1a2235;
-  --sidebar-text:    #646e84; --sidebar-text-active: #e2e8f0;
-  --sidebar-brand:   #3b82f6; --sidebar-icon:    #3b82f6;
-  --shadow-sm:  0 1px 2px rgba(0,0,0,0.3);  --shadow-md:  0 4px 12px rgba(0,0,0,0.4);  --shadow-lg:  0 8px 30px rgba(0,0,0,0.5);
-  --ink: #e2e8f0;  --ink-secondary: #94a3b8;  --ink-muted: #646e84;
-  --gridline: #1e2433;  --baseline: #2a3142;  --border: rgba(255,255,255,0.06);
-  --s1: #3b82f6;  --s2: #10b981;  --s3: #e879f9;  --s4: #f59e0b;  --s5: #14b8a6;  --s6: #f97316;  --s7: #8b5cf6;  --s8: #ef4444;
-  --good: #22c55e;  --warning: #eab308;  --critical: #ef4444;
-  --delta-up: #22c55e;  --delta-down: #ef4444;
-  --type-permanent: #3b82f6;  --type-probation: #f59e0b;  --type-intern-paid: #14b8a6;  --type-intern-unpaid: #8b5cf6;  --type-outsource: #f97316;
-  --grade-sa: #22c55e;  --grade-a: #3b82f6;  --grade-bp: #f59e0b;  --grade-b: #f97316;  --grade-bm: #ef4444;  --grade-c: #ef4444;  --grade-d: #7f1d1d;
+  --page:          #0e0e0c;
+  --surface:       #171714;
+  --surface-hover: #1e1d19;
+  --surface-raised: #20201b;
+  --surface-border: #2a2a25;
+  --gridline:      #262622;
+  --baseline:      #3a3a33;
+  --ink:           #f1f0eb;
+  --ink-secondary: #a9a79e;
+  --ink-muted:     #6f6e65;
+  --sidebar:          #0a0c11;
+  --sidebar-hover:    #141925;
+  --sidebar-active:   #1c2436;
+  --sidebar-text:     #5b647d;
+  --sidebar-text-active: #eef1f7;
+  --sidebar-icon:     #79829c;
+  --accent:        #3987e5;
+  --accent-strong: #5a9ef0;
+  --accent-soft:   rgba(57,135,229,0.14);
+  --s1: #3987e5;  --s2: #d95926;  --s3: #199e70;  --s4: #c98500;
+  --s5: #d55181;  --s6: #008300;  --s7: #9085e9;  --s8: #e66767;
+  --good: #0ca30c;  --warning: #fab219;  --critical: #e25454;
+  --type-permanent:    #3987e5;
+  --type-probation:    #c98500;
+  --type-intern-paid:  #199e70;
+  --type-intern-unpaid:#9085e9;
+  --type-outsource:    #d95926;
+  --grade-sa: #22c55e;  --grade-a: #3987e5;  --grade-bp: #e3a008;
+  --grade-b:  #ea8a2a;  --grade-bm: #e25454; --grade-c:  #b9433a;
+  --grade-d:  #8c2a20;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.35);
+  --shadow-md: 0 2px 8px rgba(0,0,0,0.4), 0 10px 30px rgba(0,0,0,0.35);
+  --shadow-lg: 0 6px 18px rgba(0,0,0,0.45), 0 20px 50px rgba(0,0,0,0.4);
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{font-size:13.5px}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans',Helvetica,Arial,sans-serif;background:var(--page);color:var(--ink);line-height:1.5;min-height:100vh;overflow-x:hidden;-webkit-font-smoothing:antialiased}
-a{color:var(--s1);text-decoration:none}
-/* Sidebar */
-.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--sidebar);z-index:100;display:flex;flex-direction:column;overflow:hidden;transition:transform var(--transition);border-right:1px solid var(--surface-border)}
-.sidebar-brand{padding:18px 18px 14px;display:flex;align-items:center;gap:10px}
-.sidebar-brand .brand-icon{width:26px;height:26px;background:var(--sidebar-brand);border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:.92rem;font-weight:700;color:#fff;flex-shrink:0}
+html{font-size:14px}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif;
+  background:var(--page);color:var(--ink);line-height:1.55;min-height:100vh;overflow-x:hidden;
+  -webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;
+}
+a{color:var(--accent);text-decoration:none}
+:focus-visible{outline:2px solid var(--accent);outline-offset:1px;border-radius:4px}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:var(--baseline);border-radius:8px;border:2px solid transparent;background-clip:content-box}
+::-webkit-scrollbar-thumb:hover{background:var(--ink-muted);background-clip:content-box}
+/* ═══ Sidebar ═══ */
+.sidebar{position:fixed;top:0;left:0;width:var(--sidebar-w);height:100vh;background:var(--sidebar);z-index:100;display:flex;flex-direction:column;overflow:hidden;transition:transform var(--transition)}
+.sidebar-brand{padding:20px 18px 16px;display:flex;align-items:center;gap:11px}
+.sidebar-brand .brand-icon{
+  width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:.82rem;font-weight:700;color:#fff;flex-shrink:0;
+  background:linear-gradient(135deg,#2a78d6 0%,#1e5cb4 100%);
+  box-shadow:0 3px 10px rgba(42,120,214,0.35);
+}
 .sidebar-brand .brand-text{display:flex;flex-direction:column}
-.sidebar-brand h1{font-size:.88rem;font-weight:600;color:var(--sidebar-text-active);letter-spacing:-.01em;line-height:1.3}
-.sidebar-brand .sub{font-size:.66rem;color:var(--sidebar-text)}
-.sidebar-nav{flex:1;padding:6px 8px;overflow-y:auto}
-.sidebar-nav::-webkit-scrollbar{width:4px}
-.sidebar-nav::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.08);border-radius:2px}
-.nav-section{font-size:.62rem;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--sidebar-text);padding:10px 12px 3px;opacity:0.55}
-.nav-item{display:flex;align-items:center;gap:9px;padding:6px 10px;border-radius:var(--radius-sm);color:var(--sidebar-text);font-size:.78rem;font-weight:450;cursor:pointer;transition:all .12s;margin-bottom:2px;border:none;background:none;width:100%;text-align:left}
+.sidebar-brand h1{font-size:.92rem;font-weight:650;color:var(--sidebar-text-active);letter-spacing:-.01em;line-height:1.3}
+.sidebar-brand .sub{font-size:.66rem;color:var(--sidebar-text);margin-top:1px}
+.sidebar-nav{flex:1;padding:6px 10px;overflow-y:auto}
+.nav-section{font-size:.6rem;font-weight:650;text-transform:uppercase;letter-spacing:.08em;color:var(--sidebar-text);padding:14px 10px 4px;opacity:.55}
+.nav-item{
+  display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:8px;
+  color:var(--sidebar-text);font-size:.8rem;font-weight:500;cursor:pointer;
+  transition:background .15s,color .15s;margin-bottom:1px;border:none;background:none;width:100%;text-align:left;
+}
 .nav-item:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
-.nav-item.active{background:var(--sidebar-active);color:var(--sidebar-text-active);font-weight:500}
-.nav-item .nav-icon{font-size:.95rem;width:18px;text-align:center;flex-shrink:0;opacity:.7}
-.nav-item.active .nav-icon{opacity:1}
-.nav-item .badge{margin-left:auto;background:var(--critical);color:#fff;font-size:.6rem;padding:1px 6px;border-radius:10px;font-weight:600;min-width:18px;text-align:center}
-.nav-item .perf-badge{background:var(--grade-a)}
-.sidebar-footer{padding:8px 8px;border-top:1px solid rgba(255,255,255,0.06)}
-.theme-btn{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:var(--radius-sm);color:var(--sidebar-text);font-size:.74rem;cursor:pointer;transition:all .12s;border:none;background:none;width:100%;text-align:left}
+.nav-item.active{background:var(--sidebar-active);color:var(--sidebar-text-active);font-weight:600}
+.nav-item .nav-icon{width:18px;height:18px;flex-shrink:0;opacity:.75;display:flex;align-items:center;justify-content:center}
+.nav-item .nav-icon svg{width:18px;height:18px}
+.nav-item.active .nav-icon{opacity:1;color:var(--accent)}
+.nav-item .badge{margin-left:auto;background:var(--critical);color:#fff;font-size:.6rem;padding:1px 6px;border-radius:10px;font-weight:600;min-width:18px;text-align:center;line-height:1.5}
+.nav-item .perf-badge{background:var(--accent)}
+.sidebar-footer{padding:10px;border-top:1px solid rgba(255,255,255,0.06)}
+.theme-btn{
+  display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:8px;width:100%;text-align:left;
+  color:var(--sidebar-text);font-size:.76rem;cursor:pointer;transition:background .15s,color .15s;border:none;background:none;
+}
 .theme-btn:hover{background:var(--sidebar-hover);color:var(--sidebar-text-active)}
-/* Main */
+.theme-btn .theme-ic{width:16px;height:16px;display:flex;align-items:center;justify-content:center}
+.theme-btn .theme-ic svg{width:16px;height:16px}
+/* ═══ Main ═══ */
 .main{margin-left:var(--sidebar-w);min-height:100vh;display:flex;flex-direction:column}
-.header{height:var(--header-h);display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid var(--surface-border);background:var(--surface);flex-shrink:0;gap:12px}
-.header-left{display:flex;align-items:center;gap:10px}
+.header{
+  height:var(--header-h);display:flex;align-items:center;justify-content:space-between;
+  padding:0 22px;border-bottom:1px solid var(--surface-border);background:color-mix(in srgb,var(--surface) 92%,transparent);
+  backdrop-filter:blur(10px);position:sticky;top:0;z-index:50;flex-shrink:0;gap:12px;
+}
+.header-left{display:flex;align-items:center;gap:11px}
 .mobile-menu-btn{background:none;border:none;font-size:1.2rem;cursor:pointer;padding:4px;color:var(--ink);display:none}
-.header-left h2{font-size:1rem;font-weight:600;letter-spacing:-.01em;color:var(--ink)}
-.header-breadcrumb{font-size:.72rem;color:var(--ink-muted);padding:2px 8px;background:var(--gridline);border-radius:20px}
+.header-left h2{font-size:1.02rem;font-weight:650;letter-spacing:-.01em;color:var(--ink)}
+.header-breadcrumb{font-size:.7rem;color:var(--ink-muted);padding:3px 10px;background:var(--gridline);border-radius:20px}
 .header-right{display:flex;align-items:center;gap:8px}
-.header-btn{font-size:.74rem;padding:4px 10px;border-radius:var(--radius-sm);border:1px solid var(--surface-border);background:var(--surface);color:var(--ink-secondary);cursor:pointer;transition:all .12s;display:flex;align-items:center;gap:4px}
-.header-btn:hover{border-color:var(--s1);color:var(--s1)}
+.header-btn{
+  font-size:.74rem;padding:5px 11px;border-radius:8px;border:1px solid var(--surface-border);
+  background:var(--surface);color:var(--ink-secondary);cursor:pointer;transition:all .15s;display:flex;align-items:center;gap:6px;
+}
+.header-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
 .header-btn .btn-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
 .header-btn .btn-dot.loaded{background:var(--good)}
 .header-btn .btn-dot.empty{background:var(--ink-muted)}
 #lastUpdated{font-size:.66rem;color:var(--ink-muted)}
-.content{padding:16px 20px 40px;flex:1;max-width:1440px;width:100%}
-/* Upload */
-.upload-zone{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:56px 28px;border:2px dashed var(--baseline);border-radius:var(--radius-lg);background:var(--surface);cursor:pointer;transition:all .25s;text-align:center;min-height:280px;margin-bottom:14px}
-.upload-zone:hover,.upload-zone.dragover{border-color:var(--s1);background:var(--surface-hover);box-shadow:0 0 0 4px color-mix(in srgb,var(--s1) 12%,transparent)}
-.upload-zone .icon{font-size:2.8rem;line-height:1;margin-bottom:10px}
-.upload-zone h3{font-size:1.08rem;font-weight:600;margin-bottom:3px;color:var(--ink)}
-.upload-zone p{font-size:.8rem;color:var(--ink-secondary);max-width:440px;line-height:1.6}
-.upload-zone .hint{font-size:.72rem;color:var(--ink-muted);margin-top:3px}
+.content{padding:20px 24px 48px;flex:1;max-width:1440px;width:100%}
+/* ═══ Upload ═══ */
+.upload-zone{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;padding:64px 32px;
+  border:1.5px dashed var(--baseline);border-radius:var(--radius-lg);background:var(--surface);
+  cursor:pointer;transition:all .25s;text-align:center;min-height:320px;margin-bottom:14px;
+  box-shadow:var(--shadow-sm);position:relative;
+}
+.upload-zone::before{content:'';position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(120% 80% at 50% 0%,var(--accent-soft) 0%,transparent 55%)}
+.upload-zone:hover,.upload-zone.dragover{border-color:var(--accent);box-shadow:var(--shadow-md)}
+.upload-zone.dragover{background:color-mix(in srgb,var(--accent) 4%,var(--surface))}
+.upload-zone .icon{
+  width:64px;height:64px;border-radius:18px;display:flex;align-items:center;justify-content:center;
+  background:var(--accent-soft);color:var(--accent);margin-bottom:18px;
+}
+.upload-zone .icon svg{width:32px;height:32px}
+.upload-zone h3{font-size:1.16rem;font-weight:650;margin-bottom:6px;color:var(--ink);letter-spacing:-.01em}
+.upload-zone p{font-size:.82rem;color:var(--ink-secondary);max-width:460px;line-height:1.7}
+.upload-zone .hint{font-size:.72rem;color:var(--ink-muted);margin-top:4px}
+.upload-zone .file-types{margin-top:14px;display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+.upload-zone .file-types span{
+  padding:3px 11px;border-radius:20px;background:var(--accent-soft);color:var(--accent);font-size:.68rem;font-weight:550;
+}
 .upload-zone input[type="file"]{display:none}
-.upload-btn{font:inherit;padding:8px 20px;border-radius:var(--radius-md);font-size:.82rem;font-weight:500;cursor:pointer;border:none;transition:all .15s}
-.upload-btn.primary{background:var(--s1);color:#fff}
-.upload-btn.primary:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.upload-btn{font:inherit;padding:9px 22px;border-radius:9px;font-size:.82rem;font-weight:600;cursor:pointer;border:none;transition:all .15s;display:inline-flex;align-items:center;gap:6px}
+.upload-btn .btn-ic{width:15px;height:15px;display:flex;align-items:center;justify-content:center}
+.upload-btn .btn-ic svg{width:15px;height:15px}
+.upload-btn.primary{background:var(--accent);color:#fff;box-shadow:0 3px 10px rgba(42,120,214,0.28)}
+.upload-btn.primary:hover{filter:brightness(1.06);transform:translateY(-1px)}
+.upload-btn.primary:active{transform:translateY(0) scale(.98)}
 .upload-btn.secondary{background:var(--surface);color:var(--ink-secondary);border:1px solid var(--baseline)}
-.upload-btn.secondary:hover{border-color:var(--s1);color:var(--s1)}
-.upload-zone .file-types{margin-top:12px;display:flex;gap:5px;flex-wrap:wrap;justify-content:center}
-.upload-zone .file-types span{padding:2px 9px;border-radius:20px;background:color-mix(in srgb,var(--s1) 10%,transparent);color:var(--s1);font-size:.68rem;font-weight:500}
-.upload-footer{margin-top:10px;display:flex;gap:12px;align-items:center;font-size:.72rem;color:var(--ink-muted);flex-wrap:wrap}
+.upload-btn.secondary:hover{border-color:var(--accent);color:var(--accent)}
+.folder-btn-wrap{margin-top:16px;display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+.upload-footer{margin-top:14px;display:flex;gap:12px;align-items:center;font-size:.72rem;color:var(--ink-muted);flex-wrap:wrap}
 .upload-footer .upload-divider{width:1px;height:12px;background:var(--baseline)}
-.upload-footer .upload-status{color:var(--good);display:none}
+.upload-footer .upload-status{color:var(--good);display:none;font-weight:550}
 .upload-footer .upload-status.show{display:inline}
-/* Filter bar */
-.filter-bar{display:flex;align-items:center;gap:6px;padding:6px 12px;background:var(--surface);border-radius:var(--radius-md);border:1px solid var(--surface-border);margin-bottom:8px;flex-wrap:wrap;min-height:40px}
-.filter-bar .filter-group{display:flex;align-items:center;gap:3px}
-.filter-bar label{font-size:.68rem;font-weight:500;color:var(--ink-muted);white-space:nowrap;padding:0 2px}
-.filter-bar select,.filter-bar input[type="date"]{font:inherit;font-size:.74rem;padding:3px 6px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;min-width:64px;cursor:pointer;transition:border-color .15s,box-shadow .15s;height:26px}
-.filter-bar select:focus,.filter-bar input:focus{border-color:var(--s1);box-shadow:0 0 0 3px color-mix(in srgb,var(--s1) 20%,transparent)}
-.filter-bar .filter-stat{margin-left:auto;font-size:.68rem;color:var(--ink-muted);white-space:nowrap;padding:2px 8px;background:var(--gridline);border-radius:20px}
-.filter-bar .clear-btn{border:none;background:none;color:var(--ink-muted);font-size:.72rem;cursor:pointer;padding:3px 6px;border-radius:4px;transition:all .12s}
-.filter-bar .clear-btn:hover{background:var(--gridline);color:var(--ink)}
-.filter-separator{width:1px;height:18px;background:var(--gridline);margin:0 2px}
+/* ═══ Filter bar ═══ */
+.filter-bar{
+  display:flex;align-items:center;gap:7px;padding:8px 14px;background:var(--surface);
+  border-radius:var(--radius-md);border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);
+  margin-bottom:10px;flex-wrap:wrap;min-height:44px;
+}
+.filter-bar .filter-group{display:flex;align-items:center;gap:5px}
+.filter-bar label{font-size:.68rem;font-weight:600;color:var(--ink-muted);white-space:nowrap;padding:0 2px}
+.filter-bar select,.filter-bar input[type="date"]{
+  font:inherit;font-size:.74rem;padding:4px 8px;border-radius:7px;border:1px solid var(--baseline);
+  background:var(--surface);color:var(--ink);outline:none;min-width:72px;cursor:pointer;height:30px;
+  transition:border-color .15s,box-shadow .15s;
+}
+.filter-bar select:hover{border-color:var(--ink-muted)}
+.filter-bar select:focus,.filter-bar input:focus{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.filter-bar .filter-stat{margin-left:auto;font-size:.68rem;color:var(--ink-secondary);white-space:nowrap;padding:3px 10px;background:var(--gridline);border-radius:20px;font-weight:550}
+.filter-bar .clear-btn{border:none;background:none;color:var(--ink-muted);font-size:.72rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .12s;font-weight:550}
+.filter-bar .clear-btn:hover{background:var(--gridline);color:var(--critical)}
+.filter-separator{width:1px;height:20px;background:var(--gridline);margin:0 3px}
 .filter-bar .date-sep{color:var(--ink-muted);font-size:.7rem}
 /* ═══ Alert Bar ═══ */
-.alert-bar{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;overflow:hidden}
-.alert-item{display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:var(--radius-md);border:1px solid var(--surface-border);background:var(--surface);box-shadow:var(--shadow-sm);transition:all .25s;animation:alertSlideIn .3s ease}
-@keyframes alertSlideIn{from{opacity:0;transform:translateX(-15px)}to{opacity:1;transform:translateX(0)}}
-.alert-item.alert-critical{border-left:3px solid var(--critical);background:color-mix(in srgb,var(--critical) 6%,var(--surface))}
+.alert-bar{display:flex;flex-direction:column;gap:7px;margin-bottom:10px;overflow:hidden}
+.alert-item{
+  display:flex;align-items:center;gap:12px;padding:9px 14px;border-radius:var(--radius-md);
+  border:1px solid var(--surface-border);background:var(--surface);box-shadow:var(--shadow-sm);
+  transition:box-shadow .2s,transform .15s;animation:alertSlideIn .3s ease;
+}
+.alert-item:hover{box-shadow:var(--shadow-md)}
+.alert-item.alert-critical{border-left:3px solid var(--critical);background:color-mix(in srgb,var(--critical) 5%,var(--surface))}
 .alert-item.alert-warning{border-left:3px solid var(--warning);background:color-mix(in srgb,var(--warning) 6%,var(--surface))}
-.alert-item.alert-info{border-left:3px solid var(--s1);background:color-mix(in srgb,var(--s1) 4%,var(--surface))}
-.alert-icon{font-size:1.1rem;flex-shrink:0}
+.alert-item.alert-info{border-left:3px solid var(--accent);background:color-mix(in srgb,var(--accent) 4%,var(--surface))}
+@keyframes alertSlideIn{from{opacity:0;transform:translateX(-15px)}to{opacity:1;transform:translateX(0)}}
+.alert-icon{
+  width:30px;height:30px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:1rem;flex-shrink:0;background:color-mix(in srgb,var(--ink-muted) 14%,transparent);
+}
+.alert-item.alert-critical .alert-icon{background:color-mix(in srgb,var(--critical) 14%,transparent)}
+.alert-item.alert-warning .alert-icon{background:color-mix(in srgb,var(--warning) 18%,transparent)}
+.alert-item.alert-info .alert-icon{background:color-mix(in srgb,var(--accent) 14%,transparent)}
 .alert-body{flex:1;min-width:0}
-.alert-title{font-size:.76rem;font-weight:600;color:var(--ink)}
-.alert-title .alert-count{font-size:.66rem;font-weight:500;color:var(--ink-muted);margin-left:5px}
-.alert-desc{font-size:.68rem;color:var(--ink-secondary);margin-top:1px;line-height:1.4}
-.alert-actions{display:flex;gap:4px;flex-shrink:0}
-.alert-goto{font-size:.66rem;padding:3px 8px;border-radius:4px;border:1px solid var(--surface-border);background:var(--surface);color:var(--s1);cursor:pointer;transition:all .12s}
-.alert-goto:hover{background:var(--s1);color:#fff;border-color:var(--s1)}
-.alert-close{font-size:.7rem;padding:3px 7px;border-radius:4px;border:none;background:transparent;color:var(--ink-muted);cursor:pointer;transition:all .12s}
+.alert-title{font-size:.78rem;font-weight:650;color:var(--ink)}
+.alert-title .alert-count{font-size:.66rem;font-weight:550;color:var(--ink-muted);margin-left:5px}
+.alert-desc{font-size:.68rem;color:var(--ink-secondary);margin-top:1px;line-height:1.45}
+.alert-actions{display:flex;gap:5px;flex-shrink:0}
+.alert-goto{font-size:.66rem;padding:4px 10px;border-radius:7px;border:1px solid var(--surface-border);background:var(--surface);color:var(--accent);cursor:pointer;transition:all .12s;font-weight:600}
+.alert-goto:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+.alert-close{font-size:.72rem;padding:4px 8px;border-radius:7px;border:none;background:transparent;color:var(--ink-muted);cursor:pointer;transition:all .12s}
 .alert-close:hover{background:var(--gridline);color:var(--ink)}
-/* KPI */
-.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:8px;margin-bottom:12px}
-.kpi-card{background:var(--surface);border-radius:var(--radius-md);padding:12px 14px;border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition),transform var(--transition);cursor:default;position:relative;overflow:hidden}
-.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-1px)}
-.kpi-card .kpi-label{font-size:.66rem;font-weight:500;color:var(--ink-muted);letter-spacing:.01em}
-.kpi-card .kpi-value{font-size:1.5rem;font-weight:650;line-height:1.2;letter-spacing:-.02em;color:var(--ink)}
-.kpi-card .kpi-sub{font-size:.68rem;color:var(--ink-secondary);margin-top:1px}
-.kpi-card .kpi-accent{position:absolute;top:0;left:0;width:3px;height:100%;border-radius:0 2px 2px 0}
+/* ═══ KPI ═══ */
+.kpi-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(168px,1fr));gap:10px;margin-bottom:14px}
+.kpi-card{
+  background:var(--surface);border-radius:var(--radius-md);padding:14px 16px 13px;
+  border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow .2s,transform .2s;
+  cursor:default;position:relative;overflow:hidden;
+}
+.kpi-card:hover{box-shadow:var(--shadow-md);transform:translateY(-2px)}
+.kpi-card .kpi-accent{position:absolute;top:0;left:0;width:100%;height:3px;background:var(--baseline)}
+.kpi-card .kpi-label{font-size:.66rem;font-weight:600;color:var(--ink-muted);letter-spacing:.02em}
+.kpi-card .kpi-value{font-size:1.55rem;font-weight:680;line-height:1.25;letter-spacing:-.02em;color:var(--ink);margin-top:2px}
+.kpi-card .kpi-sub{font-size:.68rem;color:var(--ink-secondary);margin-top:3px}
 .kpi-card.accent-s1 .kpi-accent{background:var(--s1)}
 .kpi-card.accent-s2 .kpi-accent{background:var(--s2)}
 .kpi-card.accent-s4 .kpi-accent{background:var(--s4)}
 .kpi-card.accent-s5 .kpi-accent{background:var(--s5)}
 .kpi-card.accent-s6 .kpi-accent{background:var(--s6)}
+.kpi-card.accent-s7 .kpi-accent{background:var(--s7)}
 .kpi-card.accent-s8 .kpi-accent{background:var(--s8)}
 .kpi-card.accent-grade-sa .kpi-accent{background:var(--grade-sa)}
 .kpi-card.accent-grade-a .kpi-accent{background:var(--grade-a)}
-/* Charts */
-.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:10px;margin-bottom:10px}
-.chart-grid.tight{grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}
-.chart-card{background:var(--surface);border-radius:var(--radius-md);padding:14px 16px 10px;border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow var(--transition)}
+/* ═══ Charts ═══ */
+.chart-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(380px,1fr));gap:12px;margin-bottom:12px}
+.chart-grid.tight{grid-template-columns:repeat(auto-fit,minmax(340px,1fr))}
+.chart-card{
+  background:var(--surface);border-radius:var(--radius-lg);padding:16px 18px 12px;
+  border:1px solid var(--surface-border);box-shadow:var(--shadow-sm);transition:box-shadow .2s;
+}
 .chart-card:hover{box-shadow:var(--shadow-md)}
-.chart-card .chart-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
-.chart-card .chart-header h3{font-size:.78rem;font-weight:600;color:var(--ink)}
-.chart-card .chart-header .chart-badge{font-size:.64rem;color:var(--ink-muted);background:var(--gridline);padding:1px 7px;border-radius:10px}
-.chart-card .chart-wrap{position:relative;width:100%;height:240px}
-.chart-card .chart-wrap.tall{height:290px}
+.chart-card .chart-header{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.chart-card .chart-header h3{font-size:.8rem;font-weight:650;color:var(--ink);letter-spacing:-.005em}
+.chart-card .chart-header .chart-badge{margin-left:auto;font-size:.64rem;color:var(--ink-muted);background:var(--gridline);padding:2px 9px;border-radius:12px;font-weight:550}
+.chart-export-btn{
+  flex-shrink:0;width:26px;height:26px;border-radius:7px;border:1px solid transparent;background:none;
+  color:var(--ink-muted);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .13s;
+}
+.chart-export-btn svg{width:14px;height:14px}
+.chart-export-btn:hover{background:var(--gridline);color:var(--accent);border-color:var(--surface-border)}
+.chart-card .chart-wrap{position:relative;width:100%;height:248px}
+.chart-card .chart-wrap.tall{height:300px}
 .chart-card .chart-wrap canvas{width:100% !important;height:100% !important}
 .chart-card.full{grid-column:1 / -1}
-/* Table */
-.raw-section{margin-top:10px}
-.raw-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;flex-wrap:wrap;gap:6px}
-.raw-header h3{font-size:.78rem;font-weight:600;color:var(--ink)}
-.raw-header .raw-controls{display:flex;gap:5px;align-items:center;flex-wrap:wrap}
-.raw-header input[type="text"]{font:inherit;font-size:.74rem;padding:3px 6px 3px 24px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;width:160px;transition:border-color .15s,width .2s}
-.raw-header input[type="text"]:focus{border-color:var(--s1);width:200px;box-shadow:0 0 0 3px color-mix(in srgb,var(--s1) 20%,transparent)}
-.raw-header select{font:inherit;font-size:.72rem;padding:3px 5px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:24px}
+/* ═══ Table ═══ */
+.raw-section{margin-top:14px}
+.raw-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px}
+.raw-header h3{font-size:.82rem;font-weight:650;color:var(--ink)}
+.raw-header .raw-controls{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.raw-header input[type="text"]{
+  font:inherit;font-size:.74rem;padding:4px 8px 4px 28px;border-radius:7px;border:1px solid var(--baseline);
+  background:var(--surface);color:var(--ink);outline:none;width:160px;transition:border-color .15s,width .2s,box-shadow .15s;
+}
+.raw-header input[type="text"]:focus{border-color:var(--accent);width:200px;box-shadow:0 0 0 3px var(--accent-soft)}
+.raw-header select{
+  font:inherit;font-size:.72rem;padding:4px 7px;border-radius:7px;border:1px solid var(--baseline);
+  background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:28px;
+}
 .search-wrap{position:relative}
-.search-wrap .search-icon{position:absolute;left:7px;top:50%;transform:translateY(-50%);font-size:.66rem;color:var(--ink-muted);pointer-events:none}
-.data-table-wrap{overflow-x:auto;max-height:380px;overflow-y:auto;border-radius:var(--radius-sm);border:1px solid var(--gridline);background:var(--surface)}
+.search-wrap .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--ink-muted);pointer-events:none;display:flex}
+.search-wrap .search-icon svg{width:13px;height:13px}
+.data-table-wrap{
+  overflow-x:auto;max-height:380px;overflow-y:auto;border-radius:var(--radius-md);
+  border:1px solid var(--gridline);background:var(--surface);box-shadow:var(--shadow-sm);
+}
 .data-table-wrap table{width:100%;border-collapse:collapse;font-size:.72rem}
-.data-table-wrap th{position:sticky;top:0;background:var(--surface-hover);padding:5px 7px;text-align:left;font-weight:600;border-bottom:2px solid var(--baseline);color:var(--ink-secondary);white-space:nowrap;z-index:2;font-size:.68rem}
-.data-table-wrap td{padding:4px 7px;border-bottom:1px solid var(--gridline);white-space:nowrap;color:var(--ink)}
+.data-table-wrap th{
+  position:sticky;top:0;background:var(--surface-hover);padding:7px 10px;text-align:left;font-weight:650;
+  border-bottom:1px solid var(--baseline);color:var(--ink-secondary);white-space:nowrap;z-index:2;font-size:.68rem;
+}
+.data-table-wrap td{padding:6px 10px;border-bottom:1px solid var(--gridline);white-space:nowrap;color:var(--ink)}
 .data-table-wrap tr:last-child td{border-bottom:none}
-.data-table-wrap tr:hover td{background:color-mix(in srgb,var(--s1) 6%,transparent)}
-/* Tags */
-.tag{display:inline-block;padding:1px 6px;border-radius:10px;font-size:.64rem;font-weight:500;line-height:1.5}
-.tag-active{background:color-mix(in srgb,var(--good) 12%,transparent);color:var(--good)}
-.tag-inactive{background:color-mix(in srgb,var(--critical) 12%,transparent);color:var(--critical)}
-.tag-permanent{background:color-mix(in srgb,var(--type-permanent) 10%,transparent);color:var(--type-permanent)}
-.tag-probation{background:color-mix(in srgb,var(--type-probation) 12%,transparent);color:var(--type-probation)}
-.tag-intern-paid{background:color-mix(in srgb,var(--type-intern-paid) 10%,transparent);color:var(--type-intern-paid)}
-.tag-intern-unpaid{background:color-mix(in srgb,var(--type-intern-unpaid) 10%,transparent);color:var(--type-intern-unpaid)}
-.tag-outsource{background:color-mix(in srgb,var(--type-outsource) 10%,transparent);color:var(--type-outsource)}
-.tag-grade-sa{background:color-mix(in srgb,var(--grade-sa) 12%,transparent);color:var(--grade-sa)}
-.tag-grade-a{background:color-mix(in srgb,var(--grade-a) 12%,transparent);color:var(--grade-a)}
-.tag-grade-bp{background:color-mix(in srgb,var(--grade-bp) 12%,transparent);color:var(--grade-bp)}
-.tag-grade-b{background:color-mix(in srgb,var(--grade-b) 12%,transparent);color:var(--grade-b)}
-.tag-grade-bm{background:color-mix(in srgb,var(--grade-bm) 12%,transparent);color:var(--grade-bm)}
-.tag-grade-c{background:color-mix(in srgb,var(--grade-c) 12%,transparent);color:var(--grade-c)}
-.tag-grade-d{background:color-mix(in srgb,var(--grade-d) 12%,transparent);color:var(--grade-d)}
-.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px 16px;color:var(--ink-muted);text-align:center}
-.empty-state .icon{font-size:1.8rem;margin-bottom:5px;opacity:0.4}
+.data-table-wrap tr:hover td{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+/* ═══ Tags ═══ */
+.tag{display:inline-block;padding:1.5px 8px;border-radius:12px;font-size:.64rem;font-weight:600;line-height:1.6}
+.tag-active{background:color-mix(in srgb,var(--good) 13%,transparent);color:var(--good)}
+.tag-inactive{background:color-mix(in srgb,var(--critical) 13%,transparent);color:var(--critical)}
+.tag-permanent{background:color-mix(in srgb,var(--type-permanent) 11%,transparent);color:var(--type-permanent)}
+.tag-probation{background:color-mix(in srgb,var(--type-probation) 13%,transparent);color:var(--type-probation)}
+.tag-intern-paid{background:color-mix(in srgb,var(--type-intern-paid) 11%,transparent);color:var(--type-intern-paid)}
+.tag-intern-unpaid{background:color-mix(in srgb,var(--type-intern-unpaid) 11%,transparent);color:var(--type-intern-unpaid)}
+.tag-outsource{background:color-mix(in srgb,var(--type-outsource) 11%,transparent);color:var(--type-outsource)}
+.tag-grade-sa{background:color-mix(in srgb,var(--grade-sa) 13%,transparent);color:var(--grade-sa)}
+.tag-grade-a{background:color-mix(in srgb,var(--grade-a) 13%,transparent);color:var(--grade-a)}
+.tag-grade-bp{background:color-mix(in srgb,var(--grade-bp) 13%,transparent);color:var(--grade-bp)}
+.tag-grade-b{background:color-mix(in srgb,var(--grade-b) 13%,transparent);color:var(--grade-b)}
+.tag-grade-bm{background:color-mix(in srgb,var(--grade-bm) 13%,transparent);color:var(--grade-bm)}
+.tag-grade-c{background:color-mix(in srgb,var(--grade-c) 13%,transparent);color:var(--grade-c)}
+.tag-grade-d{background:color-mix(in srgb,var(--grade-d) 13%,transparent);color:var(--grade-d)}
+/* ═══ Empty / misc ═══ */
+.empty-state{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 16px;color:var(--ink-muted);text-align:center}
+.empty-state .icon{font-size:1.8rem;margin-bottom:5px;opacity:.4}
 .hidden{display:none !important}
-.fade-in{animation:fadeIn .3s ease}
-@keyframes fadeIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}
+.fade-in{animation:pageFade .3s ease}
+@keyframes pageFade{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeUp{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+/* ═══ Toast ═══ */
+#appToast{
+  position:fixed;left:50%;bottom:28px;transform:translateX(-50%) translateY(16px);z-index:2000;
+  background:var(--ink);color:var(--surface);font-size:.76rem;padding:9px 18px;border-radius:10px;
+  box-shadow:var(--shadow-lg);opacity:0;pointer-events:none;transition:opacity .25s,transform .25s;max-width:82vw;text-align:center;
+}
+#appToast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#appToast.error{background:var(--critical)}
+/* ═══ Print ═══ */
+@page{size:A4;margin:12mm}
+@media print{
+  .sidebar,.mobile-overlay,.mobile-menu-btn,.header,.filter-bar,.alert-bar,#uploadSection,.raw-header,.chart-export-btn,#appToast{display:none !important}
+  .main{margin-left:0 !important}
+  .content{max-width:100%;padding:0}
+  .kpi-card,.chart-card{break-inside:avoid;box-shadow:none}
+  .data-table-wrap{max-height:none;overflow:visible;box-shadow:none}
+}
+/* ═══ Responsive ═══ */
 @media(max-width:900px){
   .sidebar{transform:translateX(-100%);box-shadow:none}
-  .sidebar.open{transform:translateX(0);box-shadow:4px 0 24px rgba(0,0,0,0.3)}
-  .main{margin-left:0} .content{padding:10px}
-  .header{padding:0 10px} .mobile-menu-btn{display:block}
+  .sidebar.open{transform:translateX(0);box-shadow:6px 0 30px rgba(0,0,0,.35)}
+  .main{margin-left:0}
+  .content{padding:12px}
+  .header{padding:0 12px}
+  .mobile-menu-btn{display:block}
   .chart-grid,.chart-grid.tight{grid-template-columns:1fr}
   .kpi-row{grid-template-columns:repeat(2,1fr)}
-  .filter-bar{flex-direction:column;align-items:stretch;gap:5px}
+  .filter-bar{flex-direction:column;align-items:stretch;gap:6px}
   .filter-bar .filter-stat{margin-left:0}
   .filter-bar .filter-group{flex-wrap:wrap}
-  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:99}
+  .mobile-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:99}
   .mobile-overlay.open{display:block}
   .header-right .header-btn span{display:none}
 }
 @media(min-width:901px){
   .mobile-overlay{display:none !important}
   .mobile-menu-btn{display:none !important}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important;transition-duration:.01ms !important}
 }
 </style>
 </head>
@@ -274,21 +438,21 @@ a{color:var(--s1);text-decoration:none}
   </div>
   <div class="sidebar-nav">
     <div class="nav-section">核心视图</div>
-    <button class="nav-item active" data-page="overview" onclick="switchPage('overview')"><span class="nav-icon">📊</span> 总览<span class="badge" id="alertBadge" style="display:none">0</span></button>
-    <button class="nav-item" data-page="structure" onclick="switchPage('structure')"><span class="nav-icon">🏗️</span> 组织架构</button>
-    <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')"><span class="nav-icon">👥</span> 人员构成</button>
-    <button class="nav-item" data-page="turnover" onclick="switchPage('turnover')"><span class="nav-icon">🔄</span> 人员流动<span class="badge" id="leaverBadge">0</span></button>
+    <button class="nav-item active" data-page="overview" onclick="switchPage('overview')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 6V6zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z"/></svg></span> 总览<span class="badge" id="alertBadge" style="display:none">0</span></button>
+    <button class="nav-item" data-page="structure" onclick="switchPage('structure')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.75a.75.75 0 01.75-.75h4.5a.75.75 0 01.75.75V21"/></svg></span> 组织架构</button>
+    <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z"/></svg></span> 人员结构</button>
+    <button class="nav-item" data-page="turnover" onclick="switchPage('turnover')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5"/></svg></span> 人员流动<span class="badge" id="leaverBadge">0</span></button>
     <div class="nav-section">数据分析</div>
-    <button class="nav-item" data-page="performance" onclick="switchPage('performance')"><span class="nav-icon">⭐</span> 绩效评估<span class="badge perf-badge" id="perfBadge" style="display:none">i</span></button>
-    <button class="nav-item" data-page="employment" onclick="switchPage('employment')"><span class="nav-icon">📋</span> 用工类型</button>
+    <button class="nav-item" data-page="performance" onclick="switchPage('performance')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M11.48 3.499a.562.562 0 011.04 0l2.125 5.111a.563.563 0 00.475.345l5.518.442c.499.04.701.663.321.988l-4.204 3.602a.563.563 0 00-.182.557l1.285 5.385a.562.562 0 01-.84.61l-4.725-2.885a.563.563 0 00-.586 0L6.982 20.54a.562.562 0 01-.84-.61l1.285-5.386a.562.562 0 00-.182-.557l-4.204-3.602a.563.563 0 01.321-.988l5.518-.442a.563.563 0 00.475-.345L11.48 3.5z"/></svg></span> 绩效评估<span class="badge perf-badge" id="perfBadge" style="display:none">i</span></button>
+    <button class="nav-item" data-page="employment" onclick="switchPage('employment')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M20.25 14.15v4.25c0 1.094-.787 2.036-1.872 2.18-2.087.277-4.216.42-6.378.42s-4.291-.143-6.378-.42c-1.085-.144-1.872-1.086-1.872-2.18v-4.25m16.5 0a2.18 2.18 0 00.75-1.661V8.706c0-1.081-.768-2.015-1.837-2.175a48.114 48.114 0 00-3.413-.387m4.5 8.006c-.194.165-.42.295-.673.38A23.978 23.978 0 0112 15.75c-2.648 0-5.195-.429-7.577-1.22a2.016 2.016 0 01-.673-.38m0 0A2.18 2.18 0 013 12.489V8.706c0-1.081.768-2.015 1.837-2.175a48.111 48.111 0 013.413-.387m7.5 0V5.25A2.25 2.25 0 0013.5 3h-3a2.25 2.25 0 00-2.25 2.25v.894m7.5 0a48.667 48.667 0 00-7.5 0"/></svg></span> 用工类型</button>
     <div class="nav-section">人才发展</div>
-    <button class="nav-item" data-page="talent" onclick="switchPage('talent')"><span class="nav-icon">📈</span> 人才发展</button>
-    <button class="nav-item" data-page="health" onclick="switchPage('health')"><span class="nav-icon">🏛️</span> 职级健康度</button>
+    <button class="nav-item" data-page="talent" onclick="switchPage('talent')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941"/></svg></span> 人才发展</button>
+    <button class="nav-item" data-page="health" onclick="switchPage('health')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z"/></svg></span> 职级健康度</button>
     <div class="nav-section">员工数据</div>
-    <button class="nav-item" data-page="employee" onclick="switchPage('employee')"><span class="nav-icon">📋</span> 员工明细</button>
+    <button class="nav-item" data-page="employee" onclick="switchPage('employee')"><span class="nav-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 002.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 00-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 00.75-.75 2.25 2.25 0 00-.1-.664m-5.8 0A2.251 2.251 0 0113.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25z"/></svg></span> 员工明细</button>
   </div>
   <div class="sidebar-footer">
-    <button class="theme-btn" onclick="toggleTheme()"><span>🌓</span> <span id="themeLabel">深色模式</span></button>
+    <button class="theme-btn" onclick="toggleTheme()"><span class="theme-ic"><svg id="themeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M21.752 15.002A9.718 9.718 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/></svg></span> <span id="themeLabel">深色模式</span></button>
   </div>
 </nav>
 <div class="main">
@@ -300,27 +464,28 @@ a{color:var(--s1);text-decoration:none}
     </div>
     <div class="header-right">
       <span style="font-size:.7rem;color:var(--ink-muted)" id="perfCount"></span>
-      <button class="header-btn" onclick="uploadPerfData()"><span class="btn-dot empty" id="perfDot"></span><span>上传绩效</span></button>
+      <button class="header-btn" onclick="uploadPerfData()"><span class="btn-dot empty" id="perfDot"></span><span>上传绩效文件</span></button>
+      <button class="header-btn" onclick="window.print()" title="打印 / 另存为 PDF 报告">🖨️ <span>打印 / 存 PDF</span></button>
       <span id="lastUpdated"></span>
     </div>
   </header>
   <div class="content" id="mainContent">
     <div id="uploadSection">
       <div class="upload-zone" id="uploadZone">
-        <div class="icon">📊</div>
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M12 16.5V9.75m0 0l3 3m-3-3l-3 3M6.75 19.5a4.5 4.5 0 01-1.41-8.775 5.25 5.25 0 0110.233-2.33 3 3 0 013.758 3.848A3.752 3.752 0 0118 19.5H6.75z"/></svg></div>
         <h3>HR 数据看板</h3>
-        <p>将 <strong>KPA 格式 Excel</strong> 文件拖拽到此处，或点击下方按钮选择数据文件夹</p>
-        <p class="hint">支持 .xlsx / .xls · 将 KPA 和绩效 Excel 放在同一文件夹，一次性加载</p>
-        <div class="folder-btn-wrap" style="margin-top:12px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap">
-          <button class="upload-btn primary" onclick="document.getElementById('folderPicker').click()">📁 选择数据文件夹</button>
-          <button class="upload-btn secondary" onclick="document.getElementById('fileInput').click()">📄 选择单个文件</button>
+        <p>将 HR 系统导出的 <strong>Excel 文件</strong>拖拽到此处，或点击下方按钮选择数据文件夹</p>
+        <p class="hint">支持 .xlsx / .xls · 员工数据与绩效文件可放同一文件夹，一次性加载</p>
+        <div class="folder-btn-wrap">
+          <button class="upload-btn primary" onclick="document.getElementById('folderPicker').click()"><span class="btn-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z"/></svg></span>选择数据文件夹</button>
+          <button class="upload-btn secondary" onclick="document.getElementById('fileInput').click()"><span class="btn-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z"/></svg></span>选择单个文件</button>
         </div>
         <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none">
         <input type="file" id="folderPicker" webkitdirectory accept=".xlsx,.xls" style="display:none">
         <div class="upload-footer">
           <span class="upload-status" id="uploadPerfStatus">已上传绩效数据</span>
           <span class="upload-divider"></span>
-          <span>首次加载后，可将所有 Excel 放进同一文件夹，下次双击 HTML 直接选文件夹</span>
+          <span>数据仅在本机浏览器处理，不会上传任何服务器 · 首次加载后，可将所有 Excel 放进同一文件夹，下次双击 HTML 直接选文件夹</span>
         </div>
       </div>
     </div>
@@ -348,15 +513,15 @@ a{color:var(--s1);text-decoration:none}
         <div class="kpi-row" id="kpiRow"></div>
         <div class="chart-grid">
           <div class="chart-card full">
-            <div class="chart-header"><h3 id="hcTitle">编制分布</h3><span class="chart-badge" id="hcCount"></span></div>
+            <div class="chart-header"><h3 id="hcTitle">各中心编制分布</h3><span class="chart-badge" id="hcCount"></span></div>
             <div class="chart-wrap tall"><canvas id="chartHeadcount"></canvas></div>
           </div>
           <div class="chart-card">
-            <div class="chart-header"><h3>月度入离职趋势</h3><span class="chart-badge">近 12 个月</span></div>
+            <div class="chart-header"><h3>月度入职 / 离职趋势</h3><span class="chart-badge">近 12 个月</span></div>
             <div class="chart-wrap tall"><canvas id="chartTurnoverTrend"></canvas></div>
           </div>
           <div class="chart-card">
-            <div class="chart-header"><h3>用工类型构成</h3><span class="chart-badge" id="typeCount"></span></div>
+            <div class="chart-header"><h3>用工类型结构</h3><span class="chart-badge" id="typeCount"></span></div>
             <div class="chart-wrap"><canvas id="chartEmpType"></canvas></div>
           </div>
         </div>
@@ -368,7 +533,7 @@ a{color:var(--s1);text-decoration:none}
         <div class="chart-grid tight">
           <div class="chart-card full"><div class="chart-header"><h3>职级分布 · 按中心</h3><span class="chart-badge" id="levelCount"></span></div><div class="chart-wrap tall"><canvas id="chartLevel"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>职级 × 子等级矩阵</h3><span class="chart-badge">深色 = 人数多</span></div><div class="chart-wrap tall"><canvas id="chartLevelMatrix"></canvas></div></div>
-          <div class="chart-card"><div class="chart-header"><h3>各部门人数</h3><span class="chart-badge">Top 15</span></div><div class="chart-wrap"><canvas id="chartDept"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>各部门在职人数</h3><span class="chart-badge">Top 15</span></div><div class="chart-wrap"><canvas id="chartDept"></canvas></div></div>
           <div class="chart-card"><div class="chart-header"><h3>岗位序列分布</h3></div><div class="chart-wrap"><canvas id="chartSeries"></canvas></div></div>
         </div>
       </div>
@@ -388,10 +553,12 @@ a{color:var(--s1);text-decoration:none}
       <div class="page hidden" id="page-turnover">
         <div class="kpi-row" id="turnoverKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
         <div class="chart-grid tight">
+          <div class="chart-card full"><div class="chart-header"><h3>分月离职率（近 12 个月）</h3><span class="chart-badge">当月离职 / 月末在册</span></div><div class="chart-wrap"><canvas id="chartMonthlyTurnover"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>近 12 个月入职 · 按用工类型</h3><span class="chart-badge">入职结构</span></div><div class="chart-wrap"><canvas id="chartJoinByType"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>离职分析 · 按职级</h3></div><div class="chart-wrap tall"><canvas id="chartLeaverLevel"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>离职分析 · 按司龄段</h3></div><div class="chart-wrap tall"><canvas id="chartLeaverTenure"></canvas></div></div>
           <div class="chart-card"><div class="chart-header"><h3>离职分析 · 按用工类型</h3></div><div class="chart-wrap"><canvas id="chartLeaverType"></canvas></div></div>
-          <div class="chart-card"><div class="chart-header"><h3>招聘来源分析</h3></div><div class="chart-wrap"><canvas id="chartSource"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>离职员工招聘来源</h3></div><div class="chart-wrap"><canvas id="chartSource"></canvas></div></div>
         </div>
       </div>
 
@@ -399,8 +566,8 @@ a{color:var(--s1);text-decoration:none}
       <div class="page hidden" id="page-performance">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
           <div class="filter-group" style="display:flex;align-items:center;gap:4px">
-            <label style="font-size:.68rem;font-weight:500;color:var(--ink-muted)">评估周期</label>
-            <select id="perfPeriod" onchange="onPerfPeriodChange()" style="font:inherit;font-size:.74rem;padding:3px 6px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:26px">
+            <label style="font-size:.68rem;font-weight:600;color:var(--ink-muted)">评估周期</label>
+            <select id="perfPeriod" onchange="onPerfPeriodChange()" style="font:inherit;font-size:.74rem;padding:4px 8px;border-radius:7px;border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;cursor:pointer;height:30px">
               <option value="finalGrade">2026H1 终评</option>
               <option value="initGrade">2026H1 初评</option>
               <option value="grade2025Y">2025年终</option>
@@ -415,9 +582,9 @@ a{color:var(--s1);text-decoration:none}
         <div class="chart-grid tight">
           <div class="chart-card full"><div class="chart-header"><h3 id="perfGradeTitle">终评绩效等级分布</h3><span class="chart-badge" id="perfGradeCount"></span></div><div class="chart-wrap"><canvas id="chartPerfGradeDist"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>绩效等级 × 职级交叉分析</h3><span class="chart-badge">深色 = 人数多</span></div><div class="chart-wrap tall"><canvas id="chartPerfLevelMatrix"></canvas></div></div>
-          <div class="chart-card"><div class="chart-header"><h3>投入系数分布</h3><span class="chart-badge">工时投入</span></div><div class="chart-wrap"><canvas id="chartInputCoeff"></canvas></div></div>
-          <div class="chart-card"><div class="chart-header"><h3>绩效变动分析</h3><span class="chart-badge">升/降/持平</span></div><div class="chart-wrap"><canvas id="chartPerfChange"></canvas></div></div>
-          <div class="chart-card full"><div class="chart-header"><h3>历史绩效趋势</h3><span class="chart-badge">2024中 → 2026H1</span></div><div class="chart-wrap tall"><canvas id="chartPerfTrend"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>工时投入系数分布</h3><span class="chart-badge">工时投入</span></div><div class="chart-wrap"><canvas id="chartInputCoeff"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>绩效升降变动分析</h3><span class="chart-badge">升 / 降 / 持平</span></div><div class="chart-wrap"><canvas id="chartPerfChange"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>历史绩效趋势</h3><span class="chart-badge">2024 中 → 2026H1</span></div><div class="chart-wrap tall"><canvas id="chartPerfTrend"></canvas></div></div>
         </div>
       </div>
 
@@ -436,9 +603,9 @@ a{color:var(--s1);text-decoration:none}
         <div class="kpi-row" id="talentKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(150px,1fr))"></div>
         <div class="chart-grid tight">
           <div class="chart-card full"><div class="chart-header"><h3>职级晋升通道</h3><span class="chart-badge">当前在职人数分布</span></div><div class="chart-wrap tall"><canvas id="chartPromoChannel"></canvas></div></div>
-          <div class="chart-card"><div class="chart-header"><h3>高绩效人才分布</h3><span class="chart-badge">SA+A 级</span></div><div class="chart-wrap tall"><canvas id="chartHighPerf"></canvas></div></div>
+          <div class="chart-card"><div class="chart-header"><h3>高绩效人才分布</h3><span class="chart-badge">SA / A 级</span></div><div class="chart-wrap tall"><canvas id="chartHighPerf"></canvas></div></div>
           <div class="chart-card"><div class="chart-header"><h3>梯队建设</h3><span class="chart-badge">后备人才</span></div><div class="chart-wrap tall"><canvas id="chartTierType"></canvas></div></div>
-          <div class="chart-card full"><div class="chart-header"><h3>核心人才留存风险</h3><span class="chart-badge">高绩效/高司龄</span></div><div class="chart-wrap tall"><canvas id="chartRetentionRisk"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>核心人才留存风险</h3><span class="chart-badge">高绩效 / 高司龄</span></div><div class="chart-wrap tall"><canvas id="chartRetentionRisk"></canvas></div></div>
         </div>
       </div>
 
@@ -446,7 +613,7 @@ a{color:var(--s1);text-decoration:none}
       <div class="page hidden" id="page-health">
         <div class="kpi-row" id="healthKpiRow" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))"></div>
         <div class="chart-grid tight">
-          <div class="chart-card full"><div class="chart-header"><h3>职级金字塔</h3><span class="chart-badge">T/P 序列</span></div><div class="chart-wrap tall"><canvas id="chartPyramid"></canvas></div></div>
+          <div class="chart-card full"><div class="chart-header"><h3>职级金字塔</h3><span class="chart-badge">T / P 序列</span></div><div class="chart-wrap tall"><canvas id="chartPyramid"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>管理 vs 技术通道</h3><span class="chart-badge">双通道分布</span></div><div class="chart-wrap tall"><canvas id="chartChannel"></canvas></div></div>
           <div class="chart-card full"><div class="chart-header"><h3>各中心职级分布对比</h3></div><div class="chart-wrap tall"><canvas id="chartCenterLevel"></canvas></div></div>
         </div>
@@ -455,21 +622,21 @@ a{color:var(--s1);text-decoration:none}
       <!-- ═══ PAGE: Employee Detail ═══ -->
       <div class="page hidden" id="page-employee">
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-          <h3 style="font-size:.82rem;font-weight:600">📋 员工明细</h3>
+          <h3 style="font-size:.84rem;font-weight:650">员工明细</h3>
           <span style="font-size:.68rem;color:var(--ink-muted)" id="empTableCount"></span>
         </div>
-        <div style="display:flex;gap:5px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
           <div class="search-wrap">
-            <span class="search-icon">🔍</span>
-            <input type="text" id="empSearch" placeholder="搜索姓名/编号/部门..." oninput="debounceSearch(renderEmployeeTable, 200)" style="font:inherit;font-size:.74rem;padding:3px 6px 3px 24px;border-radius:var(--radius-sm);border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;width:180px;transition:border-color .15s">
+            <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg></span>
+            <input type="text" id="empSearch" placeholder="搜索姓名 / 编号 / 部门…" oninput="debounceSearch(renderEmployeeTable, 200)" style="font:inherit;font-size:.74rem;padding:5px 8px 5px 30px;border-radius:8px;border:1px solid var(--baseline);background:var(--surface);color:var(--ink);outline:none;width:200px;transition:border-color .15s">
           </div>
-          <button class="header-btn" onclick="exportEmployeeTable()">📥 导出CSV</button>
+          <button class="header-btn" onclick="exportEmployeeTable()">📥 导出 CSV</button>
           <button class="header-btn" onclick="clearAllColumnFilters()" style="margin-left:auto">✕ 清除筛选</button>
           <span style="font-size:.68rem;color:var(--ink-muted)" id="empFilterHint"></span>
         </div>
         <div id="empAlertBanner" style="width:100%"></div>
-        <div id="filterPopup" style="display:none;position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--baseline);border-radius:var(--radius-sm);box-shadow:var(--shadow-lg);min-width:180px;max-width:300px;max-height:360px;overflow-y:auto;font-size:.72rem;padding-bottom:0"></div>
-        <div class="data-table-wrap" id="empTableWrap" style="max-height:600px"></div>
+        <div id="filterPopup" style="display:none;position:fixed;z-index:1000;background:var(--surface);border:1px solid var(--surface-border);border-radius:10px;box-shadow:var(--shadow-lg);min-width:180px;max-width:300px;max-height:380px;overflow-y:auto;font-size:.72rem;padding-bottom:0"></div>
+        <div class="data-table-wrap" id="empTableWrap" style="max-height:640px"></div>
       </div>
 
       <!-- ═══ DATA TABLE (shared) ═══ -->
@@ -487,8 +654,8 @@ a{color:var(--s1);text-decoration:none}
             </select>
             <select id="tableFilterVal" onchange="renderTable()" style="display:none"></select>
             <div class="search-wrap">
-              <span class="search-icon">🔍</span>
-              <input type="text" id="searchInput" placeholder="搜索..." oninput="renderTable()">
+              <span class="search-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z"/></svg></span>
+              <input type="text" id="searchInput" placeholder="搜索…" oninput="renderTable()">
             </div>
           </div>
         </div>
@@ -503,6 +670,6 @@ a{color:var(--s1);text-decoration:none}
 <script src="hr-table.js"></script>
 <script src="hr-alerts.js"></script>
 <script src="hr-data.js"></script>
-<script>console.log('📊 HR 数据看板 v5 — 预警系统 + 完整员工明细 + 代码拆分');</script>
+<script>console.log('📊 HR 数据看板 v6 — 现代专业风重制 · 报告导出 + 专业 HR 指标');</script>
 </body>
 </html>

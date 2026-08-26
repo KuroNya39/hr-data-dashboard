@@ -14,18 +14,18 @@ function renderPerfTable() {
   const filtered = getFiltered();
   const active = filtered.filter(d=>d.status==='在职');
   const perfActive = active.filter(d=>d.hasPerf);
-  document.getElementById('tableTitle').textContent = '⭐ 绩效明细';
+  document.getElementById('tableTitle').textContent = '绩效明细';
 
   const q = (document.getElementById('searchInput').value||'').toLowerCase().trim();
   let rows = perfActive;
   if(q) rows = perfActive.filter(d=>(d.id||'').toLowerCase().includes(q)||(d.name||'').toLowerCase().includes(q)||(d.dept||'').toLowerCase().includes(q));
 
-  const headers = ['工号','姓名','中心','部门','职等','终评绩效','半年前','变动','工时投入','梯队类型'];
+  const headers = ['工号','姓名','中心','部门','职等','终评等级','2025年终','升降变动','工时投入系数','梯队类型'];
   const fields = [(d)=>d.id,(d)=>d.name,(d)=>d.center,(d)=>d.dept,(d)=>d.level,
     (d)=>gradeTag(d.perfFinalGrade),(d)=>d.perfGrade2025Y||'—',(d)=>d.perfGradeChange||'—',
     (d)=>d.perfInputCoeff?d.perfInputCoeff.toFixed(2):'—',(d)=>d.perfTierType||'—'];
 
-  document.getElementById('tableCount').textContent = `共 ${rows.length} 条绩效记录 (${perfActive.length} 人有绩效数据)`;
+  document.getElementById('tableCount').textContent = `共 ${rows.length} 条绩效记录 · 绩效覆盖 ${perfActive.length} 人（有绩效数据）`;
   let html = '<table><thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
   rows.forEach(d=>{html+='<tr>'+fields.map(f=>`<td>${f(d)}</td>`).join('')+'</tr>';});
   html+='</tbody></table>';
@@ -56,7 +56,7 @@ function rebuildTableFilter() {
 function renderTable(data) {
   if(!document.getElementById('page-performance').classList.contains('hidden')) { renderPerfTable(); return; }
   if(!document.getElementById('page-employee').classList.contains('hidden')) return; // employee page has its own table
-  document.getElementById('tableTitle').textContent = '📋 员工明细';
+  document.getElementById('tableTitle').textContent = '员工明细';
 
   const filtered = data || getFiltered();
   const q = (document.getElementById('searchInput').value||'').toLowerCase().trim();
@@ -71,7 +71,7 @@ function renderTable(data) {
     rows = rows.filter(d => getKey(d) === colVal);
   }
 
-  const headers = ['员工编号','姓名','中心','部门','职级','子等级','状态','用工类型','学历','性别','入职日期','离职日期','绩效'];
+  const headers = ['员工编号','姓名','中心','部门','职级','子等级','状态','用工类型','学历','性别','入职日期','离职日期','绩效等级'];
   const keys = ['id','name','center','dept','level','subLevel','status','empType','edu','gender','joinDate','leaveDate'];
   document.getElementById('tableCount').textContent = `共 ${rows.length} 条记录`;
   let html = '<table><thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';

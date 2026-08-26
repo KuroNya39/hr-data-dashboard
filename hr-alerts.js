@@ -31,12 +31,12 @@ function generateAlerts() {
     const daysSinceJoin = (now - jd) / (86400000);
     return daysSinceJoin >= 80 && daysSinceJoin <= 105;
   });
-  if(interviewCandidates.length > 0 && notDismissed('入职3月访谈提醒')) {
+  if(interviewCandidates.length > 0 && notDismissed('新员工入职访谈提醒（80–105天）')) {
     alerts.push({
       type: 'info',
       icon: '📞',
-      title: '入职3月访谈提醒',
-      desc: `${interviewCandidates.length} 名员工入职将近3个月，建议安排员工/导师访谈`,
+      title: '新员工入职访谈提醒（80–105天）',
+      desc: `${interviewCandidates.length} 名员工入职约3个月（80–105天），建议安排新员工/导师访谈`,
       count: interviewCandidates.length,
       page: 'employee',
       filter: (d) => interviewCandidates.includes(d),
@@ -51,11 +51,11 @@ function generateAlerts() {
     const monthsSince = (now - jd) / (30 * 86400000);
     return monthsSince >= 4.5 && monthsSince <= 5.8;
   });
-  if(probationDue.length > 0 && notDismissed('试用期转正提醒')) {
+  if(probationDue.length > 0 && notDismissed('试用期到期转正提醒')) {
     alerts.push({
       type: 'warning',
       icon: '⚠️',
-      title: '试用期转正提醒',
+      title: '试用期到期转正提醒',
       desc: `${probationDue.length} 名试用期员工即将满6个月，请及时发起转正流程`,
       count: probationDue.length,
       page: 'employment',
@@ -149,11 +149,11 @@ function generateAlerts() {
     const yearsSince = (now - jd) / (365.25 * 86400000);
     return yearsSince > 2;
   });
-  if(longTermOutsource.length > 0 && notDismissed('外包人员长期在岗')) {
+  if(longTermOutsource.length > 0 && notDismissed('外包人员长期在岗提醒')) {
     alerts.push({
       type: 'info',
       icon: '🔄',
-      title: '外包人员长期在岗',
+      title: '外包人员长期在岗提醒',
       desc: `${longTermOutsource.length} 名外包人员入职超过2年，建议评估是否转为正式编制`,
       count: longTermOutsource.length,
       page: 'employment',
