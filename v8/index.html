@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-page-node-id="oZp6ZzHccGUGJRe85uWxZZ">
+<head data-page-node-id="vFc2hovHfokHFPRgobQWdH">
+<meta charset="UTF-8" data-page-node-id="XbGDEqECjHWPTq5vGT047O">
+<meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="EQ99iILRJhdYtSQQXrAZm8">
+<meta name="description" content="HR 数据看板 — 三类人群分开统计、部门可下钻、口径可标注的 HRBP 工作台。本地 Excel 解析，数据不出本机。" data-page-node-id="9OWsaiD7ESJVVSTybZ154e">
+<title>HR 数据看板</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='700' fill='white' text-anchor='middle' font-family='sans-serif'%3EHR%3C/text%3E%3C/svg%3E" data-page-node-id="YnyqME1QhUmeSqcFeoytes">
+<script>document.documentElement.setAttribute('data-theme', localStorage.getItem('hr8-theme')||'light');</script>
+<script src="vendor/chart.umd.min.js"></script>
+<script src="vendor/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="vendor/noto-sans-sc.css" data-page-node-id="fontNoto">
+<link rel="stylesheet" href="vendor/material-symbols.css" data-page-node-id="fontIcons">
+<link rel="stylesheet" href="css/style.css" data-page-node-id="XpkfEPX7G7wTdXZY8SDvdG">
+</head>
+<body data-page-node-id="IVHGntJ1ATLG8nwYcCkDMx">
+<div class="app" data-page-node-id="wJTDFRwez5B8GllPawM4A1">
+
+  <!-- ── 侧边栏 ── -->
+  <aside class="sidebar" id="sidebar" data-page-node-id="iUxXUCeHbfygAFD6U5rL55">
+    <div class="brand" data-page-node-id="ou7AIWk4uFMmppXlPBzZD3">
+      <div class="brand-mark" data-page-node-id="1TS3C7w8MtAfky7kkn6NHw">HR</div>
+      <div data-page-node-id="Ic7ijbEYa6imEtKr1zsWVI"><div class="brand-name" data-page-node-id="bw1JnCF7Abb0xwHBsCVFxN">人力数据看板</div><div class="brand-sub" data-page-node-id="faJhIxAzVo53GuY328LGYW">HRBP 工作台</div></div>
+    </div>
+    <nav class="nav" data-page-node-id="z8PtxTpuD5Iv3sFAsxUop4">
+      <button class="nav-item active" data-page="overview" onclick="switchPage('overview')" data-page-node-id="hTgO1aYhL0HoHDwGC4rEne"><span class="ico" data-page-node-id="NF0hgS9j1sksaXv1vyGo4j"><span class="mi">dashboard</span></span>总览</button>
+      <button class="nav-item" data-page="structure" onclick="switchPage('structure')" data-page-node-id="m90GdY4pqtL9rPBCCzoUpX"><span class="ico" data-page-node-id="u0MunhqtUc3JbHfXB9zpLS"><span class="mi">account_tree</span></span>组织与用工</button>
+      <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')" data-page-node-id="rd8fb5jgoiUAJSwN7UJNfL"><span class="ico" data-page-node-id="OI7vB4CAoC9tfpW6LGfnhR"><span class="mi">groups</span></span>人员结构</button>
+      <button class="nav-item" data-page="turnover" onclick="switchPage('turnover')" data-page-node-id="EKEWoulxE5HZgQYbFHlBFT"><span class="ico" data-page-node-id="STrFdlbeCEcYHxaxvk1z1w"><span class="mi">swap_horiz</span></span>人员流动</button>
+      <button class="nav-item" data-page="ops" onclick="switchPage('ops')" data-page-node-id="r1bZ4ezY4xY5B7KtfafBDq"><span class="ico" data-page-node-id="1oED3kyC0IFMaSO9Hd4u1b"><span class="mi">task_alt</span></span>转正与合同</button>
+      <button class="nav-item" data-page="talent" onclick="switchPage('talent')" data-page-node-id="q0KSX3OR0XO42zdimjG1LP"><span class="ico" data-page-node-id="M3lsDyOEAnLjVIyeoXulCy"><span class="mi">military_tech</span></span>梯队绩效盘点</button>
+      <button class="nav-item" data-page="health" onclick="switchPage('health')" data-page-node-id="hDhna7berGGndltNQclZuJ"><span class="ico" data-page-node-id="uULo1TGnAs4CyN8mWwZeAK"><span class="mi">stairs</span></span>职级健康度</button>
+      <div class="nav-divider" data-page-node-id="ledgerDivider">日常办公</div>
+      <button class="nav-item" data-page="ledger" onclick="switchPage('ledger')" data-page-node-id="ledgerNav"><span class="ico" data-page-node-id="ledgerIco"><span class="mi">assignment</span></span>HR 工作台账</button>
+      <button class="nav-item" data-page="employee" onclick="switchPage('employee')" data-page-node-id="7MC3IlTci0euZ9P3l3oq2E"><span class="ico" data-page-node-id="VMVQqSAkkjVKuJwp8IOmkx"><span class="mi">table_view</span></span>员工明细<span class="nav-badge" id="navBadge" data-page-node-id="4E4cVfAqxmn0cZHEw33urO"></span></button>
+    </nav>
+    <div class="side-foot" data-page-node-id="aQuSAIJnGoWX4sjYgJG5kJ">
+      <button class="side-theme" onclick="toggleTheme()" id="themeBtn" title="切换深浅色主题" data-page-node-id="yy2rahAsY3sOGuIzRbTN0R"><span class="ico" data-page-node-id="themeIcoWrap"><span class="mi" id="themeIco">dark_mode</span></span><span id="themeLabel">深色模式</span></button>
+    </div>
+  </aside>
+  <div class="mobile-overlay" id="mobileOverlay" onclick="toggleSidebar()" data-page-node-id="oCJ3InETnkEgnFMllLen7Z"></div>
+
+  <!-- ── 主区 ── -->
+  <div class="main" data-page-node-id="MVGbTBRFYCP29Xw7CPNCDL">
+    <header class="topbar" data-page-node-id="3iuc3sW0M1xhcMUtwGbrfh">
+      <button class="hamburger no-print" onclick="toggleSidebar()" data-page-node-id="aGxhSza7VwoFRKfAHVNcFW"><span class="mi">menu</span></button>
+      <div data-page-node-id="3eDJBWunmLr6w8eLilhSrj"><div class="page-title" id="pageTitle" data-page-node-id="uwFUzLDouVmtGnNHVVxby1">总览</div></div>
+      <div class="page-crumb" id="pageBreadcrumb" data-page-node-id="7HEO3TqW6wZjAvjQgFk0Vw">三类人群 · 核心人力指标</div>
+      <span class="up-status" id="perfStatus" style="display:none" data-page-node-id="DRY4UhdkfnY100gNSkeWn8"></span>
+      <button class="tb-btn no-print mi-btn" onclick="uploadEmpData()" data-page-node-id="kDnLSCUbNLCaEQhizY9mEK"><span class="btn-dot" id="empDot" data-page-node-id="BmjFjxpO7yBSIs9oNIcZUM"></span><span class="mi">upload</span>上传人员数据</button>
+      <button class="tb-btn no-print mi-btn" onclick="uploadPerfData()" data-page-node-id="4AeiFRQ8KFYGQOlONbnsuR"><span class="btn-dot" id="perfDot" data-page-node-id="o4VUMy8f9vPAMyuEzsQ9ID"></span><span class="mi">upload</span>上传绩效数据</button>
+      <button class="tb-btn no-print mi-btn" onclick="uploadLedgerData()" data-page-node-id="ledgerUploadBtn"><span class="btn-dot" id="ledgerDot" data-page-node-id="ledgerDot"></span><span class="mi">upload</span>上传台账</button>
+      <button class="tb-btn no-print mi-btn" onclick="switchPage('brief')" data-page-node-id="vKTZVu13FMCZjPpKF0LZ3h"><span class="mi">summarize</span>简报模式</button>
+    </header>
+
+    <!-- ── 上传页 ── -->
+    <section class="page" id="page-upload" data-page-node-id="ZqsFFNIpzWRBAAEsToFjiy">
+      <div class="content upload-hero" data-page-node-id="D6oyx9vwMf5WYEq5hTkqxY">
+        <div class="upload-zone" id="uploadZone" data-page-node-id="jmInT7EyGIE4JQGUTXCyFb">
+          <div class="up-ico" data-page-node-id="HfpmwOalmJkdklN7fM1s6p"><span class="mi">cloud_upload</span></div>
+          <h2 data-page-node-id="eGvbpwavG4oiHrwAjdfciA">拖入 KPA 导出的 Excel 数据</h2>
+          <p data-page-node-id="UXea3n70gfEJfeRtvk7FXP">支持 .xls / .xlsx，可整文件夹导入（人员 + 绩效 + 台账自动识别）<br data-page-node-id="FezatD6539pzKPb7nunwHi">全部数据仅在本机浏览器内解析，不上传任何服务器</p>
+          <div class="upload-btns" data-page-node-id="m0PKkokWTlCDQRBAerUMQp">
+            <button class="tb-btn primary mi-btn" onclick="fileInput.click()" data-page-node-id="F4674jWpk77JHKAtzQFJ46"><span class="mi">upload_file</span>选择文件</button>
+            <button class="tb-btn mi-btn" onclick="folderPicker.click()" data-page-node-id="Rlbs84cxR8cvUZIF9oLoj4"><span class="mi">folder_open</span>选择文件夹</button>
+          </div>
+          <input type="file" id="fileInput" accept=".xls,.xlsx" style="display:none" data-page-node-id="hMNMqeXE0nGdHURtNDwnFi">
+          <input type="file" id="folderPicker" webkitdirectory style="display:none" data-page-node-id="g3LZtkrBoKptmWf6WQ4TVJ">
+          <div class="up-status" id="uploadHint" data-page-node-id="pkrTqFt7aY5uBzrYVNgcTC"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── 看板 ── -->
+    <div id="dashboard" class="hidden" data-page-node-id="G61GGDXIzcpjVlC6DHRBpI">
+      <div class="content" data-page-node-id="UkTBs5tvtJBrjQ4fkfVflW">
+
+        <!-- 筛选栏 -->
+        <div class="filter-bar no-print" data-page-node-id="8hyPVRsG5XvwXfrJsgJgVa">
+          <label data-page-node-id="flGroupLabel">人群</label><select id="filterGroup" class="group-select" onchange="onFilterChange('group')" data-page-node-id="filterGroup"></select>
+          <label data-page-node-id="UlK9dZ6FikCIE5Zuqg4Mme">状态</label><select id="filterStatus" onchange="onFilterChange('status')" data-page-node-id="qnOM2TL7atKSqUE7T87maL"></select>
+          <label data-page-node-id="X3CeCS9gOpJQ7nxZkh1yDC">中心</label><select id="filterCenter" onchange="onFilterChange('center')" data-page-node-id="BMr7y14TGGCEhXh01iudE9"></select>
+          <label data-page-node-id="Dx18GjpxsUsRffrID7xuew">部门</label><select id="filterDept" onchange="onFilterChange('dept')" data-page-node-id="B9HdIH5tAMcooTknZlTfVi"></select>
+          <label data-page-node-id="WVeTOjohjDBhBmVUMlecLh">地点</label><select id="filterLocation" onchange="onFilterChange('location')" data-page-node-id="cL2UV2YMArQtqGMTOI570T"></select>
+          <label data-page-node-id="Ygb8Xv1d0PiOEjHvpGtdWN">用工</label><select id="filterType" onchange="onFilterChange('type')" data-page-node-id="YLi4UFlJ2jZqkfBribYJr4"></select>
+          <label data-page-node-id="Z8c2lY4poFc7vSRmoET1aB">入职</label><input type="date" id="filterDateFrom" onchange="onFilterChange('date')" data-page-node-id="XHVed2HuxkRYTNUCae4DBP">
+          <span data-page-node-id="DSXo2pJFcKqGoA4JKZNFYJ">–</span><input type="date" id="filterDateTo" onchange="onFilterChange('date')" data-page-node-id="EOiAtslkEaZlZ6GqPl58xG">
+          <button class="link-btn mi-btn" onclick="resetFilters()" data-page-node-id="bynj9eNwnqdndQtA2u05v2"><span class="mi">restart_alt</span>重置</button>
+          <span class="filter-stat" id="filterStat" data-page-node-id="4hoxISaaBMKHAMDy2hsBfG"></span>
+        </div>
+
+        <!-- 预警条 -->
+        <div class="alert-bar" id="alertBar" data-page-node-id="fF2xfexZo4A9eQb6BQIo9f"></div>
+
+        <!-- ═══ 总览 ═══ -->
+        <section class="page" id="page-overview" data-page-node-id="diLY8QCuAcDzuPppDDTRma">
+          <div class="seg-row" id="segRow" data-page-node-id="segRow"></div>
+          <div class="kpi-row" id="kpiRow" data-page-node-id="LcuFWGTIGVkzq1OtIIjhcc"></div>
+          <div class="chart-grid" data-page-node-id="eEKwtiPiGzoCeNvmT0qwm2">
+            <div class="chart-card wide" data-page-node-id="EjZCqGHOwp5i4zWZa2RfZU"><div class="chart-header" data-page-node-id="8LZheDJxHfvY2u1Y4QPn6K"><h3 id="hcTitle" data-page-node-id="5AXOeOmobiYrsmCgjKGQmS">各中心编制分布</h3><span class="chart-note" id="hcCount" data-page-node-id="QfhrnrWQhvQTvmKBE2mzrH"></span></div><div class="chart-box" data-page-node-id="ECIWYoRH2caxmKthGSvOAE"><canvas id="chartHeadcount" data-page-node-id="LTzYn2NldNrbIAg6zDZZwh"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="xYejHY2r9yywWhTqZby7Tw"><div class="chart-header" data-page-node-id="Fu7hM6q7ZHzQDLoD5v0mAN"><h3 data-page-node-id="jeHFhoY28StTmh7kVunYU9">近 12 月入职 · 离职趋势</h3><span class="chart-note" id="trendNote" data-page-node-id="qKPPgYyznH3FkWaTBVr74p"></span></div><div class="chart-box" data-page-node-id="EzFv0KvvEtFOqE6msdKNzr"><canvas id="chartTurnoverTrend" data-page-node-id="M8G2tHFsXDySXj7pnOB0Hm"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="1uBvTbaPhrkSwBSrz1QRkA"><div class="chart-header" data-page-node-id="OHCRJTFVNazRx0HbACYEv3"><h3 data-page-node-id="WUrpCy3zzJqz1D83IFzjCt">用工类型结构</h3><span class="chart-note" id="typeCount" data-page-node-id="x5gQ53MhUzmZoAEileXCDB"></span></div><div class="chart-box" data-page-node-id="VgEFTGok5FzTvvj1Sf12JK"><canvas id="chartEmpType" data-page-node-id="vCEv1JD2fW7YLto9JAJn67"></canvas></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ 组织与用工 ═══ -->
+        <section class="page hidden" id="page-structure" data-page-node-id="NAGu4GW4DNkVFE62siI82L">
+          <div class="kpi-row" id="structureKpiRow" data-page-node-id="ptpmcDTChs5B0LTa59Upfv"></div>
+          <div class="chart-grid" data-page-node-id="TG3fBWD9UmKFIgJmc9Yi8S">
+            <div class="chart-card" data-page-node-id="djpM0JBdZSMv3vltvZDzUj"><div class="chart-header" data-page-node-id="8C3AEKfvGcnXDdIRQmAF77"><h3 data-page-node-id="UfWjorE8EDG60pj4673zKF">职级分布（按中心）</h3><span class="chart-note" id="levelCount" data-page-node-id="zsXlV7EzDh7eaFL8mtDkgm"></span></div><div class="chart-box tall" data-page-node-id="TdiDe4PWp9XXJBFzuOLzXa"><canvas id="chartLevel" data-page-node-id="AbsdFf2Xs9MoY5rt4fDmE4"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="qwePesYbsZYxPu7iDn6TZu"><div class="chart-header" data-page-node-id="rA9SINm5cnB8QgbHTBhHkD"><h3 data-page-node-id="cUVMIHMi9BCx3P8b0vbU2J">岗位序列分布</h3><span class="chart-note" data-page-node-id="ABemb4CiNWAKKHsWBhBfe5">归一化命名</span></div><div class="chart-box" data-page-node-id="gV7BpFF2iPDvJ62512AcdY"><canvas id="chartSeries" data-page-node-id="B1GDtptdxRcGVs1pleo6K5"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="rVE27zPeyFS40GUoayOSBO"><div class="chart-header" data-page-node-id="UVqzNaeTKCeYnK9IwpCsYD"><h3 data-page-node-id="KHdP70w0d52GGRrNd1eDCb">用工类型 × 职级</h3><span class="chart-note" data-page-node-id="7RjCElYGY4fE9WOQuWdfaB">6 类全收 · 全员</span></div><div class="chart-box" data-page-node-id="DwAmwwD5EOXQbE7DJbOiLL"><canvas id="chartEmpTypeLevel" data-page-node-id="uw7jTrqEGwsXpzd1kmAQOS"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="KFG9M60VMAeYR31jWAnjVR"><div class="chart-header" data-page-node-id="PERSv3xBGweMZiFqpAoFHl"><h3 data-page-node-id="ibCaNxVGsEg6vRgmcaw4hY">各中心用工类型对比</h3><span class="chart-note" data-page-node-id="qBEhZwok0JLkEv8ypun4IW">堆积 · 全员</span></div><div class="chart-box" data-page-node-id="dBNQPHhdbeKq5C9O8oaaGu"><canvas id="chartCenterType" data-page-node-id="0FnLogDFKXTbBRXOeZxj0t"></canvas></div></div>
+          </div>
+          <div class="list-card" style="margin-top:14px" data-page-node-id="deptMatrixCard">
+            <h3>部门透视表 <span class="chart-note" id="deptMatrixNote">二级部门 · 离职率与司龄为正式员工口径</span></h3>
+            <div class="matrix-wrap" id="deptMatrixWrap" data-page-node-id="deptMatrixWrap"></div>
+          </div>
+        </section>
+
+        <!-- ═══ 人员结构 ═══ -->
+        <section class="page hidden" id="page-demographics" data-page-node-id="fRmskcuyzAWBOBPPuQm1Cl">
+          <div style="margin-bottom:12px" data-page-node-id="demoScopeRow"><span class="chart-note" id="demoScopeNote" style="font-size:12px"></span></div>
+          <div class="chart-grid" data-page-node-id="YnLhjAWbi8cGMQriaWBxjk">
+            <div class="chart-card" data-page-node-id="nO1RyRNkyF9qiN8Kv6rn5H"><div class="chart-header" data-page-node-id="HOZ0cnhi8VAK1662qjKLlq"><h3 data-page-node-id="i4cARnrDGZA7vdUGSMaGP6">年龄分布</h3></div><div class="chart-box" data-page-node-id="thL5gbsdPs98xTjjnjJpvX"><canvas id="chartAge" data-page-node-id="NPnxoUgcObsjhWK63FZycA"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="mwdgiogti03dpkWyaYZIoj"><div class="chart-header" data-page-node-id="qWPJMypgkYhfhi9Mtf6Mjp"><h3 data-page-node-id="9V51eiPTww7pHzmHXkVWLg">司龄分布</h3></div><div class="chart-box" data-page-node-id="g2sVDknQcAgWrEihyptQTA"><canvas id="chartTenure" data-page-node-id="4xPCemlKqaKXMIYTFzmbEA"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="xGS1Q34ORRdBTKXZ8vwWAJ"><div class="chart-header" data-page-node-id="BnwI3c3F200VSJhiYPZNjM"><h3 data-page-node-id="asRVSSBSaA2UFRS196zXab">学历构成</h3></div><div class="chart-box" data-page-node-id="QIFtIW6zDstZCt1trh15ew"><canvas id="chartEdu" data-page-node-id="yUBXtgYQPAiVbmHQoay8Kj"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="uMrt4hTMdPmY95AEPDSRvD"><div class="chart-header" data-page-node-id="Zn3tqti79TsGGNYoVCYEU5"><h3 data-page-node-id="uqz0Kaimd5JdpA2mkko3pU">性别构成</h3></div><div class="chart-box" data-page-node-id="v8wwG3TR52dxZnnCOXUbo1"><canvas id="chartGender" data-page-node-id="MTqCTd4ILsY9EINBvyrnjw"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="7jWqCYkyVvkG88p0LyuJDZ"><div class="chart-header" data-page-node-id="W3jIpicbedMUkOi30sdKsN"><h3 data-page-node-id="pKtSfE0De2YpN0nJW0mp9q">工作地点分布</h3></div><div class="chart-box" data-page-node-id="9J8AnbDFSOjHcgoaenWf8i"><canvas id="chartLocation" data-page-node-id="9HMAGoANnJkxYzHHiAKdGN"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="acuHe2LeT749UWp2EWwM0q"><div class="chart-header" data-page-node-id="zqNPmJs6O8K6AK8jLN2dYX"><h3 data-page-node-id="FLgb9JzgU9U40eDDgHO0BF">社会经验 vs 司龄</h3><span class="chart-note" id="industryNote" data-page-node-id="MTP0tshvS2BqKh22PMXq9D"></span></div><div class="chart-box" data-page-node-id="u6o2TCwlOWIXNeD0ZEHPxK"><canvas id="chartIndustry" data-page-node-id="Fb2ctIjJg24vsiHjBdGRfm"></canvas></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ 人员流动 ═══ -->
+        <section class="page hidden" id="page-turnover" data-page-node-id="zGZc4KQ9wVuSFVx83xcktC">
+          <div class="kpi-row" id="turnoverKpiRow" data-page-node-id="Tu5nxUJIFgksYWIRj36VsY"></div>
+          <div class="chart-grid" data-page-node-id="alV54gcU3fBP4nKxV6yAQ3">
+            <div class="chart-card" data-page-node-id="hvn7Jc3CWHeHgcUJ6r790K"><div class="chart-header" data-page-node-id="v8DMqpFDCggOSmz2MoVBeG"><h3 data-page-node-id="rlHu2MfiioVUFyhPDggdqp">分月离职率</h3><span class="chart-note" id="monthlyTurnoverNote" data-page-node-id="H5JU6xDgcrzs9OW51R6AH1"></span></div><div class="chart-box" data-page-node-id="6auszTmoEK4CYMWDckpCdV"><canvas id="chartMonthlyTurnover" data-page-node-id="8646yDEiUTRFHy0HDnuUnX"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="UKDFFHJ8ElKcBmfOsMAHGB"><div class="chart-header" data-page-node-id="o5BGJKpRv6OJNT0f1aArb5"><h3 data-page-node-id="bFQb0vLGi593zHsATy59EX">近 12 月入职 · 按用工类型</h3><span class="chart-note" data-page-node-id="bR2fJVTb7jBbAkvfzruBBY">堆积</span></div><div class="chart-box" data-page-node-id="hCu9u4JqkHmPGeir20wdfg"><canvas id="chartJoinByType" data-page-node-id="wlilKMNUPnbd0Q4eMjTt8t"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="qCpD1CiPD2K9EKtQ0q9f3X"><div class="chart-header" data-page-node-id="Zvrnfh93kKkGEogSEKDD5y"><h3 data-page-node-id="JxEgsxqn1NHPpVp3j8N4WX">离职人员职级分布</h3><span class="chart-note" data-page-node-id="leaverLevelNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="YHSidN3PLojIFNFWkNeQ7X"><canvas id="chartLeaverLevel" data-page-node-id="cVvXBfSSSuImRf4tPzZMsc"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="J8nnMa5RCTvFReIAoB9Ckv"><div class="chart-header" data-page-node-id="p4SZK06wB4ScJPoCcSBciw"><h3 data-page-node-id="KSs72NzCwphN8iNMpfgmDO">在职时长分布（离职时）</h3><span class="chart-note" data-page-node-id="leaverTenureNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="FrHAKRjtIdEq4T8qUfGrdy"><canvas id="chartLeaverTenure" data-page-node-id="6fUQDlbJgEFnKZAICf2Kht"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="osHgeJJ4k1rZdVMzPA66CU"><div class="chart-header" data-page-node-id="Rf9LTOJp9hAcw5D4V7HOdu"><h3 data-page-node-id="yvEZOzUENYCMMWKElpGO6u">三块人群流出对照</h3><span class="chart-note" data-page-node-id="leaverTypeNote">实习 / 外协不计率</span></div><div class="chart-box" data-page-node-id="BAfmTRYW0Wu9lwGvbWn6r5"><canvas id="chartLeaverType" data-page-node-id="j4o1v3m2FkBkryXoHklgrU"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="bD6iJZTsiSGm2dZrTlVfpG"><div class="chart-header" data-page-node-id="Eep8LHANYiNlg8KJNDspUt"><h3 data-page-node-id="rMv6cq3dQud7kzUExRvTSP">招聘来源（正式离职人员）</h3></div><div class="chart-box" data-page-node-id="rKTMiiQsTdoEzebSW85H1z"><canvas id="chartSource" data-page-node-id="r0JipEzzHCAWHddAno8UZg"></canvas></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ 转正与合同 ═══ -->
+        <section class="page hidden" id="page-ops" data-page-node-id="goi9kcEKaq0MtwWgvY7Apg">
+          <div class="kpi-row" id="opsKpiRow" data-page-node-id="E3PqjU3lBexLuIpJiXudzd"></div>
+          <div class="chart-grid" data-page-node-id="NG9DiIbWqfSOffjoSCJS3M">
+            <div class="chart-card" data-page-node-id="CYfNq4FeQTNIIQV3G9zWvJ"><div class="chart-header" data-page-node-id="hAAObGvkgCTpMkbENYD8Qo"><h3 data-page-node-id="3DHjiLOgv0tTrTLZC5PluJ">合同 / 协议到期分布</h3><span class="chart-note" data-page-node-id="XTf1y5lmE48lrBdBXuQkTi">未来 90 天在职人员 · 全员</span></div><div class="chart-box" data-page-node-id="WwPi4tSYruGSp5gSMWPXh1"><canvas id="chartContractExpiry" data-page-node-id="3QZvBK4Mjssoo2BCETeLVt"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="DavT6slDiECOiSmKGBDSyt"><div class="chart-header" data-page-node-id="ELSbIB5rZl6oouCWtmbZtN"><h3 data-page-node-id="vgfXjzE6XWauOD5FYqukML">合同类型结构</h3><span class="chart-note" data-page-node-id="VtGp98T2E8uvFTimTKSLCh">在职人员 · 全员</span></div><div class="chart-box" data-page-node-id="DI6vV6UhTseU5GAAHbBBVx"><canvas id="chartContractType" data-page-node-id="GMr85L0G6jEHPqDxygFCGw"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="5he3RljmbSgcnq79lZKUSo"><div class="chart-header" data-page-node-id="B8kI9KmnU91mJIqkHuKmVj"><h3 data-page-node-id="6rHa5TkMYhgUMgbOjVDrHN">近 12 月转正 vs 届满</h3><span class="chart-note" data-page-node-id="lLZKiAZKxxd7ATrHguzNIE">红=实际转正 · 蓝=试用届满（含估算）</span></div><div class="chart-box" data-page-node-id="8zcnj7FoFMYsKfyDp9BwlU"><canvas id="chartConvertTrend" data-page-node-id="lM31bLu8jZJIw9uHlLRnPN"></canvas></div></div>
+            <div class="chart-card wide list-card no-print" data-page-node-id="xGnpIPzHljZCPpPJTYcqVp">
+              <h3 data-page-node-id="rdS1Lje4sSHpkM0pka7J6p">转正日历 — 未来 90 天试用届满名单</h3>
+              <div style="overflow:auto;max-height:300px" data-page-node-id="2IgSZioX2PXWGSbGsW3FfM"><table class="mini-table" id="probationTable" data-page-node-id="D4PpQtbLCjSiFGp8NwTqYg"></table></div>
+            </div>
+            <div class="chart-card wide list-card no-print" data-page-node-id="O2tLFdkVrJMiV15jfH5HH2">
+              <h3 data-page-node-id="EMXbIL1pCUxbETnqiOp4hS">合同到期跟踪 — 90 天内到期名单</h3>
+              <div style="overflow:auto;max-height:300px" data-page-node-id="x2tXZqG7uzYqTSZHP3IEaK"><table class="mini-table" id="contractTable" data-page-node-id="rSQ5x4teZ5zTLw8arrovc6"></table></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ 梯队绩效盘点 ═══ -->
+        <section class="page hidden" id="page-talent" data-page-node-id="VnLn2hko5QxQRQcGDu2u2s">
+          <div class="kpi-row" id="talentKpiRow" data-page-node-id="pvcXwOuE9R5RiIMtANyzqB"></div>
+          <div class="chart-grid" data-page-node-id="AVuc3nBx5CAvbEYYuVgPTL">
+            <div class="chart-card wide" data-page-node-id="M99Y8gqJbzAgBAoMuohyk4">
+              <div class="chart-header" data-page-node-id="cWHJQB7r8EOKsgI96eNRsc"><h3 data-page-node-id="xYlzWuIbBb0Etff9zAlhjM">人才盘点九宫格</h3><span class="chart-note" id="nineboxNote" data-page-node-id="9BLTqYTlf1ZamOjl1ES7tS"></span></div>
+              <div class="ninebox-wrap" id="ninebox" data-page-node-id="izWTEGDac4Jry0A0E2tbwl"></div>
+            </div>
+            <div class="chart-card" data-page-node-id="gFRVQEAmzsGMWiZYCTn3ut"><div class="chart-header" data-page-node-id="cf3BE2Te0CzdU9yYMlJvsR"><h3 data-page-node-id="JLidpFtGH6SYYdh5fzEGgk">梯队覆盖</h3><span class="chart-note" id="tierCount" data-page-node-id="bXozSEirvC6sHBUHOzhqPP"></span></div><div class="chart-box" data-page-node-id="x151qApbAHcgLYqQpgCM9L"><canvas id="chartTierType" data-page-node-id="gkbhmnYqJ0JbRATj1BzMnX"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="hImaO0HatPtqjlVcNGVLZB"><div class="chart-header" data-page-node-id="3d3Qo9Ee3qWnXWklUuYs1T"><h3 data-page-node-id="TiyvW2ioNdoGzoQIBqHTE6">绩效等级分布</h3><span class="chart-note" id="perfGradeNote" data-page-node-id="dgJK66LobSLgaXcIyaMCgc"></span></div><div class="chart-box" data-page-node-id="XIBoHHYoUHp4zZ8wUPGdzW"><canvas id="chartPerfGradeDist" data-page-node-id="DBeViTcKUUMXqHui7eIXs4"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="B0Hguwrd4Ht9teMe4ciyHb"><div class="chart-header" data-page-node-id="ya5g0x0Jj4AjZ9H6gJ1Daw"><h3 data-page-node-id="pCxrbeGC1aF4IRwL3DI3Y4">历史绩效趋势</h3><span class="chart-note" data-page-node-id="rs4WkuNqsddMK567E7UfZb">平均分值 · 动态期数</span></div><div class="chart-box" data-page-node-id="iE8fSIgVb7sfATTQySLgGo"><canvas id="chartPerfTrend" data-page-node-id="iaEAZr3tOd9NiLDHFzp7kp"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="YYlLNjcr6EabuGBj5eIVuB"><div class="chart-header" data-page-node-id="4FVatD40Hu8aFu4Y8ecCpm"><h3 data-page-node-id="nVQQxR8Z5BUM9xmYtCcUK4">工时投入系数分档</h3><span class="chart-note" data-page-node-id="BMFRp4ga69FPg4MNPLnZH3"></span></div><div class="chart-box" data-page-node-id="KUgKpN0JwhDVzcFoH6GTQy"><canvas id="chartInputCoeff" data-page-node-id="hFkfCDA2HvwSSYki32kgOD"></canvas></div></div>
+            <div class="chart-card wide list-card" data-page-node-id="27cLqDOvbSgQgnkNsFOqMQ">
+              <h3 data-page-node-id="62GwwHa9vVBxJDCrAPuzAC">梯队人员排名 · 投入明细</h3>
+              <div style="overflow:auto;max-height:320px" data-page-node-id="TVLy5BhKnGUPgQxRR01UyN"><table class="mini-table" id="talentTable" data-page-node-id="vOivyYzSwOjCaFyfOZSodL"></table></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- ═══ 职级健康度 ═══ -->
+        <section class="page hidden" id="page-health" data-page-node-id="E1WEtBA3UTydJBdXBCppo2">
+          <div class="kpi-row" id="healthKpiRow" data-page-node-id="WDumgIPmlLZQm03tdcHI8S"></div>
+          <div class="chart-grid" data-page-node-id="w2xwXe6aldlYrF5LmBuONm">
+            <div class="chart-card" data-page-node-id="3kmsuWnxal7BEMQkpT4QFa"><div class="chart-header" data-page-node-id="FohYE7Gmh7mvS2GxYvlspz"><h3 data-page-node-id="NJbvRu6CtOize9TJlGzD0i">职级金字塔（T 序列）</h3></div><div class="chart-box" data-page-node-id="7RppwQu3PmwnhGL0OY0hho"><canvas id="chartPyramid" data-page-node-id="QuQGXSv5gqWYwJaA2XvgXt"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="kHw6kPvsOmWqBOuOQEbguV"><div class="chart-header" data-page-node-id="zoYexsELkFTQHLbNrqknvQ"><h3 data-page-node-id="CdssoMyAuf025htfMZUHUv">双通道结构</h3><span class="chart-note" data-page-node-id="hKKVtGdxZbekYlXG08r8Ra">管理通道按「管理通道职等」判定</span></div><div class="chart-box" data-page-node-id="SVBfGHsXruBJMSdf929gQC"><canvas id="chartChannel" data-page-node-id="B82RENGZQBUgagoJmGjTGZ"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="0ofUuuaDeHTKyh4yncAapb"><div class="chart-header" data-page-node-id="oXAnIwIxFPFGGjAyLtvSZX"><h3 data-page-node-id="swAOTxexqGqfbEHGUA7VKr">各中心职级对比</h3><span class="chart-note" data-page-node-id="lw5PY0xjKZaMIH9vWLpJA4">堆积</span></div><div class="chart-box" data-page-node-id="nX8qmcSw0OunKlVPGn5oop"><canvas id="chartCenterLevel" data-page-node-id="VBfFWLcOSngTISTF1tuQjs"></canvas></div></div>
+          </div>
+        </section>
+
+        <!-- ═══ HR 工作台账 ═══ -->
+        <section class="page hidden" id="page-ledger" data-page-node-id="pageLedger">
+          <div id="ledgerContent" data-page-node-id="ledgerContent"></div>
+        </section>
+
+        <!-- ═══ 员工明细 ═══ -->
+        <section class="page hidden" id="page-employee" data-page-node-id="ZRQCY4VySELktsW75c0lqe">
+          <div class="emp-toolbar no-print" data-page-node-id="HHjGMcN33xAXKf5bzgWKds">
+            <input type="text" id="empSearch" placeholder="搜索工号 / 姓名 / 部门 / 职级…" oninput="debounceSearch(renderEmployeeTable,200)" data-page-node-id="tAZsQoom3ASpjUwsd9a90r">
+            <span class="emp-count" id="empTableCount" data-page-node-id="Bhfe9qrhl8OHGPBakiieiy"></span>
+            <span class="emp-count" id="empFilterHint" style="color:var(--accent)" data-page-node-id="mEvigCtjE7GtVAQU1i2kMh"></span>
+            <button class="tb-btn mi-btn" onclick="clearAllColumnFilters()" data-page-node-id="PH6qyxZIqUP9dsmpxCnS07"><span class="mi">filter_alt_off</span>清除列筛选</button>
+            <button class="tb-btn primary mi-btn" onclick="exportEmployeeTable()" data-page-node-id="oK8ulDZApLdNZvhcqUBheC"><span class="mi">download</span>导出 CSV</button>
+          </div>
+          <div id="empAlertBanner" style="margin-bottom:8px" data-page-node-id="4HXEb9B3urgNBy4ZVSuUAU"></div>
+          <div class="emp-table-wrap" id="empTableWrap" data-page-node-id="Hb4WklguuFFfZUkeRkhrG4"></div>
+        </section>
+
+        <!-- ═══ 简报 ═══ -->
+        <section class="page hidden" id="page-brief" data-page-node-id="vbkSqAKBu7ZSNhfRP0CIda">
+          <div class="brief-head" data-page-node-id="KGQ7P8FSNBkM9AEClA8Pjd">
+            <h2 data-page-node-id="UNGAFKVx0sGxIjCt4tLja8">人力月报 · 简报</h2>
+            <span class="brief-date" id="briefDate" data-page-node-id="36AWttqBpNuHi7LFQ5i9nA"></span>
+            <button class="tb-btn primary no-print mi-btn" style="margin-left:auto" onclick="window.print()" data-page-node-id="6lRFJU7dU3NAfnwlVJnG0E"><span class="mi">print</span>打印 / 存 PDF</button>
+          </div>
+          <div class="kpi-row" id="briefKpiRow" data-page-node-id="b0T76MY4I8KUWAITuhQgbC"></div>
+          <div class="brief-seg" id="briefSeg" data-page-node-id="briefSeg"></div>
+          <div class="brief-alerts" id="briefAlerts" data-page-node-id="6mLgDX7C8eKHeNgiaBK4C5"></div>
+          <div class="chart-grid" data-page-node-id="ljfjSCuFXyIOcwVoiidvRX">
+            <div class="chart-card" data-page-node-id="mFJU3Uhw5VTy40hlwAhoju"><div class="chart-header" data-page-node-id="34LrZQq8MXHnDTBolCYZCt"><h3 data-page-node-id="n6j4avoCmb9wF6dPY0GVF7">各中心编制</h3></div><div class="chart-box short" data-page-node-id="JTJTT1dDcFgiVpjHCywOtm"><canvas id="chartBriefCenter" data-page-node-id="oGEE7VPQ8a8bVLFy5fMUoR"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="zaQC9Nzlz5FYg6I2R46N25"><div class="chart-header" data-page-node-id="FEuWK27AaTaXt7NVJbbHF4"><h3 data-page-node-id="xLqG9ZHcZMg7Rvb5uP5J19">近 12 月入离职趋势</h3></div><div class="chart-box short" data-page-node-id="I0krHoE0Ex8eR5fSJADxCy"><canvas id="chartBriefTrend" data-page-node-id="AKNP5YClWmGmXtzuYVGYt8"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="9BOCfqMFNv7beuXsbcORBr"><div class="chart-header" data-page-node-id="iWWV4zTJtnNj3W0s0e4of0"><h3 data-page-node-id="leRtum05VTYfzDHnDiHKSs">用工类型结构</h3></div><div class="chart-box short" data-page-node-id="jg7zgK1Y7rCepr66cddEfI"><canvas id="chartBriefType" data-page-node-id="bMNdoTrL26jBKRtF1BBsup"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="AL3dce1gQBbYkPCvlt0hgp"><div class="chart-header" data-page-node-id="S7LqCg89NfiPcFWnwyQFMN"><h3 data-page-node-id="Q5s9SIjRZR9BJIKRcyBwqi">人才梯队覆盖</h3></div><div class="chart-box short" data-page-node-id="zr9B5VpEQUTCoUH1rAmewU"><canvas id="chartBriefTier" data-page-node-id="BRtlSwYYRHKh1fCrrHES7r"></canvas></div></div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="filterPopup" class="filter-popup" data-page-node-id="ujCbriBJgqNXV9e32tPSqd"></div>
+
+<script src="js/core.js"></script>
+<script src="js/ledger.js"></script>
+<script src="js/pages.js"></script>
+<script src="js/table.js"></script>
+<script src="js/alerts.js"></script>
+<script src="js/data.js"></script>
+</body>
+</html>
