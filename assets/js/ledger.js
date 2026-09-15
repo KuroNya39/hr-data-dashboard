@@ -48,7 +48,7 @@ function parseLedgerWorkbook(wb) {
       if (key.includes('组织架构')) out.summary = parseLedgerSummary(rows, out.summary);
       else if (key.includes('B-C') || key.includes('BC人员') || key.includes('人员情况')) out.bcPeople = parseBC(rows);
       else if (key.includes('校招需求')) out.campus27 = parseCampus27(rows);
-      else if (key.includes('外包名单')) out.outsource = parseOutsource(rows);
+      else if (key.includes('外包名单') || key.includes('外包评价')) out.outsource = parseOutsource(rows);
       else if (key.includes('入职名单')) out.onboard = parseOnboard(rows);
       else if (key.includes('招聘未达成') || key.includes('未达成需求')) out.recruitOpen = parseRecruitOpen(rows);
       else if (key.includes('储备干部')) out.reserveCandidates = parseReserve(rows);
@@ -227,9 +227,12 @@ function parseRecruitOpen(rows) {
   return out;
 }
 
-/* ── ⑦ 储备干部人员培养 ── */
+/* ── ⑦ 储备干部名单 ──
+   2026-09-12：用户的「储备干部名单」sheet 没有「职等」列了，改用「梯队」列定位表头。 */
 function parseReserve(rows) {
-  const hi = findHeaderRow(rows, ['姓名', '职等'], 5);
+  const hi = findHeaderRow(rows, ['姓名', '梯队'], 5) >= 0
+    ? findHeaderRow(rows, ['姓名', '梯队'], 5)
+    : findHeaderRow(rows, ['姓名', '职等'], 5);
   if (hi < 0) return [];
   const H = rows[hi].map(c => lv(c));
   const i = {

@@ -3,3 +3,14 @@
 
 # 本地工具目录（含真实数据截图），不入库
 .workbuddy/
+
+# 预生成数据包（含真实员工姓名 / 工号 / 毕业院校），公开仓库不入库
+assets/hr-data.js
+
+# 分享版为生成物（自包含数据），不入库
+分享版/
+
+# 调试临时文件
+_shot-*.png
+_hover-probe.js
+_inspect-orgtype.js
