@@ -161,6 +161,20 @@ function normSeries(s) {
   return t.trim();
 }
 
+/* ── 组织类型归一（前/中/后台）──
+   KPA 部分导出把同一些组织写成「营销体系 / 研发体系 / 保障体系」，
+   与标准的「前台单位 / 中台单位 / 后台单位」是同一套前中后台模型的不同叫法。
+   对照 KPA 自身标注：营销/事业部=前台，软件/研发中心=中台，财务人力行政质量=后台。 */
+function normOrgType(v) {
+  if (!v) return '';
+  const t = String(v).trim();
+  if (!t) return '';
+  if (t.includes('前台') || t.includes('营销') || t.includes('市场')) return '前台单位';
+  if (t.includes('后台') || t.includes('保障') || t.includes('职能')) return '后台单位';
+  if (t.includes('中台') || t.includes('研发')) return '中台单位';
+  return t;
+}
+
 /* ── 日期解析 ── */
 function parseExcelDate(val) {
   if (!val && val !== 0) return '';
@@ -428,7 +442,11 @@ let CHART_DEFAULTS = null;
 function chartDefaults(tc) {
   return {
     responsive: true, maintainAspectRatio: false,
+    /* v4 里 hover 有自己的默认 intersect:true —— 只写 interaction 会导致
+       鼠标离数据点稍远就「点不亮」。这里把 interaction 和 hover 都显式设为
+       index + intersect:false：悬停任意位置都命中当前 x 列，无死角 */
     interaction: { mode:'index', intersect:false },
+    hover: { mode:'index', intersect:false },
     layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
     plugins: {
       legend: { position:'bottom', labels: { padding:10, usePointStyle:true, pointStyle:'circle', font:{size:10}, boxWidth:6, boxHeight:6, color:tc['ink-2'] } },
@@ -461,7 +479,7 @@ function makeChart(id, type, labels, datasets, opts) {
     datasets = datasets.map(d => ({
       label: d.label, data: d.data,
       borderColor: d.color, backgroundColor: (d.color||tc.s2) + '1a',
-      fill: d.fill !== false, tension: 0.25, pointRadius: 2.5, pointHoverRadius: 4.5,
+      fill: d.fill !== false, tension: 0.25, pointRadius: 3, pointHoverRadius: 6, pointHitRadius: 14,
       borderWidth: 2, pointBackgroundColor: d.color, spanGaps: true }));
   }
   const options = { ...defaults, ...(opts || {}) };
@@ -472,8 +490,22 @@ function makeChart(id, type, labels, datasets, opts) {
   options.plugins = { ...defaults.plugins, ...op };
   options.plugins.tooltip = { ...defaults.plugins.tooltip, ...(op.tooltip || {}) };
   options.scales = { ...defaults.scales, ...((opts && opts.scales) || {}) };
+  /* scales 也要深度合并到「轴」这一层：调用方传 scales.y.ticks.autoSkip 等单项时，
+     不能把默认 y 轴的 beginAtZero / 字体色 / 网格线整块顶掉 */
+  for (const ax of ['x', 'y']) {
+    if (options.scales[ax] && defaults.scales[ax]) {
+      options.scales[ax] = { ...defaults.scales[ax], ...options.scales[ax] };
+      if (options.scales[ax].ticks && defaults.scales[ax].ticks) {
+        options.scales[ax].ticks = { ...defaults.scales[ax].ticks, ...options.scales[ax].ticks };
+      }
+    }
+  }
   if (type === 'doughnut') {
     options.cutout = '62%';
+    /* 环形图必须用「最近 + 相交」：默认的 index+intersect:false 会让 tooltip
+       无论鼠标悬在哪（哪怕悬在中心洞里）都固定显示同一片，等于悬停不灵敏 */
+    options.interaction = { mode:'nearest', intersect:true };
+    options.hover = { mode:'nearest', intersect:true };
     options.plugins.tooltip.callbacks = { label: ctx => {
       const t = ctx.dataset.data.reduce((a,b)=>a+b,0) || 1;
       return `${ctx.label}: ${ctx.parsed} 人 (${(ctx.parsed/t*100).toFixed(1)}%)`; } };

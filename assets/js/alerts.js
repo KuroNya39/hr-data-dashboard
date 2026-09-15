@@ -11,6 +11,32 @@ function clearAlertFilter() {
   if (!document.getElementById('page-employee').classList.contains('hidden')) renderEmployeeTable();
 }
 
+/* ── 通用跳转筛选：人员概览 / 预警 共用 ──
+   看板页注册一个 key → 筛选条件，点击卡片/图表 → jumpToDetail(key) → 人员明细自动带筛选。
+   职级下钻的 drill: 前缀 key 不预注册，运行时解析（序列:职等:子等级）。 */
+const DETAIL_FILTERS = {};
+function registerDetailFilter(key, title, filter) { DETAIL_FILTERS[key] = { title, filter }; }
+function jumpToDetail(key) {
+  let f = DETAIL_FILTERS[key];
+  if (!f && key.indexOf('drill:') === 0) {
+    const parts = key.split(':').map(p => { try { return decodeURIComponent(p); } catch (e) { return p; } });
+    const series = parts[1], level = parts[2], sub = parts[3];
+    const lvName = level && level !== 'NA' ? '·' + level : '';
+    const subName = sub ? '·' + (sub === '未填' ? '未填子等级' : sub) : '';
+    f = { title: '职级结构 · ' + series + lvName + subName, filter: d => {
+      if (d.status !== '在职') return false;
+      if (typeof seriesChannelOf === 'function' && seriesChannelOf(d) !== series) return false;
+      if (level && level !== 'NA' && (d.level || '') !== level) return false;
+      if (sub) { const want = sub === '未填' ? '' : sub; if ((d.subLevel || '') !== want) return false; }
+      return true;
+    } };
+  }
+  if (!f) return;
+  activeAlertFilter = f.filter;
+  activeAlertTitle = f.title;
+  switchPage('employee');
+}
+
 function generateAlerts() {
   const alerts = [];
   const now = new Date(); now.setHours(0,0,0,0);

@@ -160,11 +160,20 @@ function renderStructure(active, tc) {
   const scope = sc.scope;
   const centers = [...new Set(active.map(d => d.center).filter(Boolean))].sort();
   const levels = sortLevels([...new Set(pop.map(d => d.level).filter(Boolean))]);   // 去重后排序（v7 此处误用全量数组）
+  /* 手工数据源：编制达成率（仅当 data/看板数据源.xlsx 填了「部门编制」才出现） */
+  const bg = typeof dsBudgetSummary === 'function' ? dsBudgetSummary() : null;
   document.getElementById('structureKpiRow').innerHTML =
     kpi('部门数', [...new Set(pop.map(d => d.deptEn || d.dept).filter(Boolean))].length, `${scopeWord(scope)}口径`, '--s1', scope) +
     kpi('总人数', pop.length, `${levels.length} 个职级 · T/M/P/S/L 全识别`, '--s2', scope) +
     kpi('岗位序列', [...new Set(pop.map(d => d.seriesNorm).filter(Boolean))].length, '归一化后', '--s3') +
-    kpi('外包+劳务', active.filter(d => d.group === 'outsource').length, '弹性用工规模（全员口径）', '--s6', 'all');
+    (bg
+      ? kpi('编制达成率', bg.rate != null ? bg.rate.toFixed(0) + '%' : '—',
+          `已到位 ${bg.actual} / 编制 ${bg.plan}（${bg.depts} 个部门）· 手工数据源`,
+          bg.rate != null && bg.rate >= 95 ? '--pos' : bg.rate != null && bg.rate >= 85 ? '--warn' : '--neg', 'formal')
+      : kpi('外包+劳务', active.filter(d => d.group === 'outsource').length, '弹性用工规模（全员口径）', '--s6', 'all'));
+
+  /* 编制缺口图（有手工编制数据时才画，否则清图） */
+  if (typeof renderBudgetGap === 'function') renderBudgetGap();
 
   barChart('chartLevel', levels, centers.map(c => ({
     label: c, data: levels.map(l => pop.filter(d => d.center === c && d.level === l).length),
@@ -398,6 +407,7 @@ function renderOps(active, tc) {
 
   // 和上面的转正率同一口径（正式员工、同一筛选范围）；「届满」用估算值，
   // 否则三分之一没填 probationEnd 的人在这张图上根本不会出现
+  const months = getMonthsList(12);
   lineChart('chartConvertTrend', months, [
     { label:'实际转正', data: countByMonth(formalScope, 'confirmDate', months), color: tc.pos },
     { label:'试用届满', data: countByMonth(formalScope, estProbEnd, months), color: tc.s1 },
@@ -682,6 +692,36 @@ function renderLedger() {
 }
 function tc2() { return themeColors(); }
 
+/* ═══ 编制缺口（手工数据源）═══
+   数据来自 data/看板数据源.xlsx 的「部门编制」sheet。
+   没填的话图会清空，KPI 卡也退回原来的「外包+劳务」—— 不报错、不留白框。 */
+function renderBudgetGap() {
+  const el = document.getElementById('chartBudgetGap');
+  if (!el) return;
+  const rows = (typeof dsData !== 'undefined' && dsData.budget ? dsData.budget : [])
+    .filter(b => b.plan !== null && b.plan > 0)
+    .map(b => {
+      /* 已到位：优先用手工填的，没填就用 KPA 在职「正式员工」数兜底
+         （编制是正式编制，不含实习与外协，口径与 dsBudgetSummary 保持一致） */
+      const actual = b.actual !== null ? b.actual
+        : (typeof rawData !== 'undefined'
+            ? rawData.filter(d => d.status === '在职'
+                && (typeof staffGroupOf !== 'function' || staffGroupOf(d) === 'formal')
+                && (d.deptEn || d.dept) === b.dept).length
+            : 0);
+      return { ...b, actualCalc: actual, gap: b.gap !== null ? b.gap : (b.plan - actual) };
+    });
+  if (!rows.length) { destroyChart('chartBudgetGap'); return; }
+  /* 按缺口从大到小，一眼看出哪个部门最缺人 */
+  rows.sort((a, b) => b.gap - a.gap);
+  const labels = rows.map(r => r.dept);
+  const tc = themeColors();
+  barChart('chartBudgetGap', labels, [
+    { label:'已到位', data: rows.map(r => r.actualCalc), color: tc.s1, stack: 'x' },
+    { label:'缺口',   data: rows.map(r => Math.max(0, r.gap)), color: tc.neg, stack: 'x' },
+  ], { stacked: true });
+}
+
 /* ═══ 简报 ═══ */
 function renderBrief(active, allActive, allLeavers, tc) {
   if (!pageVisible('brief')) return;
@@ -721,3 +761,195 @@ function renderBrief(active, allActive, allLeavers, tc) {
   if (trl.length) doughnutChart('chartBriefTier', trl, trl.map(t => tierMap2[t]), [tc.s1, tc.s2, tc.s3]);
   else destroyChart('chartBriefTier');
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   人员概览（v8.7 新页面）—— 四大模块：规模 · 结构 · 变化 · 预警
+   定位：看板负责「发现问题」，人员明细负责「找到人」。
+   所有可落到具体人员的地方，点击即跳「人员明细」并自动带筛选。
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 序列分类（换公司可复用：逻辑不框死序列名）
+   优先用 KPA「职位序列中文描述」（normSeries 已归一化为通用名：研发技术/营销/支持/管理/职能），
+   该字段缺失时按职等前缀兜底（T/M/S/L/数字级）。通道清单由数据驱动 —— 数据里有什么序列就展示什么。 */
+function seriesChannelOf(d) {
+  const s = d.seriesNorm || d.series;
+  if (s) return String(s).trim();
+  const lv = String(d.level || '');
+  if (/^L/i.test(lv)) return '管理';
+  if (/^T/i.test(lv)) return '研发技术';
+  if (/^M/i.test(lv)) return '营销';
+  if (/^S/i.test(lv)) return '支持';
+  if (/^\d/.test(lv)) return '数字级';
+  return '未识别';
+}
+/* 内联 onclick 里的 JS 字符串转义（序列/职等名直接拼进属性，防引号破坏） */
+function jsStr(s) { return String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'"); }
+/* 职级下钻状态：序列 → 职等 → 子等级（L 通道不做子等级） */
+let peopleDrill = { series:null, level:null };
+
+/* 人员概览可点击卡片（带 key → 跳明细筛选） */
+function kpiClick(label, value, sub, colorVar, key) {
+  const dot = colorVar ? `<span class="kpi-dot" style="background:var(${colorVar})"></span>` : '';
+  return `<div class="kpi-card clickable" onclick="jumpToDetail('${key}')" title="查看名单"><div class="kpi-label">${dot}${label}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub||''}</div></div>`;
+}
+
+function renderPeople(active, allLeavers, tc) {
+  if (!pageVisible('people')) return;
+  const now = new Date(); now.setHours(0,0,0,0);
+  const base = getFiltered();                       // 全局筛选后（含在职与离职）
+  const active2 = base.filter(d => d.status === '在职');
+  const in60 = new Date(now.getTime() + 60 * 86400000);
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+  const inMonth = (d, field) => { const t = toDate(d[field]); return t && t >= monthStart && t <= monthEnd; };
+  const reg = (key, title, filter) => { if (typeof registerDetailFilter === 'function') registerDetailFilter(key, title, filter); };
+
+  /* ── ① 人员规模（5 卡）── */
+  const formal = active2.filter(d => staffGroupOf(d) === 'formal');
+  const probation = formal.filter(d => d.empType === '试用期');
+  const interns = active2.filter(d => staffGroupOf(d) === 'intern');
+  const outs = active2.filter(d => staffGroupOf(d) === 'outsource');
+  document.getElementById('peopleScaleRow').innerHTML =
+    kpiClick('总人数', active2.length, '正式 + 实习 + 外包', '--s1', 'scale:all') +
+    kpiClick('正式员工', formal.length, `含试用期 ${probation.length} 人`, '--pos', 'scale:formal') +
+    kpiClick('试用期', probation.length, '正式员工的子集', '--s2', 'scale:probation') +
+    kpiClick('实习生', interns.length, '签约 + 非签约', '--s3', 'scale:intern') +
+    kpiClick('外包', outs.length, '外包 + 劳务', '--s4', 'scale:outsource');
+  reg('scale:all', '人员规模 · 全体在职', d => d.status === '在职');
+  reg('scale:formal', '人员规模 · 正式员工', d => d.status === '在职' && staffGroupOf(d) === 'formal');
+  reg('scale:probation', '人员规模 · 试用期', d => d.status === '在职' && d.empType === '试用期');
+  reg('scale:intern', '人员规模 · 实习生', d => d.status === '在职' && staffGroupOf(d) === 'intern');
+  reg('scale:outsource', '人员规模 · 外包', d => d.status === '在职' && staffGroupOf(d) === 'outsource');
+
+  /* ── ② 部门结构（横向条形图，点击部门）── */
+  const deptRows = {};
+  active2.forEach(d => { const k = d.deptEn || d.dept; if (k) deptRows[k] = (deptRows[k] || 0) + 1; });
+  const deptKeys = Object.keys(deptRows).sort((a, b) => deptRows[b] - deptRows[a]);
+  document.getElementById('deptStructNote').innerHTML = scopeNote('all', `在职 ${active2.length} 人 · ${deptKeys.length} 个部门`);
+  barChart('chartPeopleDept', deptKeys.map(getDeptLabel), [{
+    label: '人数', data: deptKeys.map(k => deptRows[k]), color: tc.s1,
+  }], {
+    indexAxis: 'y',
+    /* 横向条形图的纵轴是部门名：默认 autoSkip 会跳过一半以上标签（maxTicksLimit≈11），
+       18 个部门只显示 11 个 →「显示不全」。关掉跳过让所有部门名都画出来 */
+    scales: { y: { ticks: { autoSkip: false } } },
+    onClick: (e, els) => { if (els.length) { const k = deptKeys[els[0].index]; if (k) jumpToDetail('dept:' + k); } },
+  });
+  deptKeys.forEach(k => reg('dept:' + k, '部门结构 · ' + getDeptLabel(k), d => d.status === '在职' && (d.deptEn || d.dept) === k));
+
+  /* ── ② 前/中/后台（组织类型环形图，全部分类都展示）── */
+  const orgTypeRows = {};
+  active2.forEach(d => { const k = normOrgType(d.orgType); if (k) orgTypeRows[k] = (orgTypeRows[k] || 0) + 1; });
+  const orgKeys = Object.keys(orgTypeRows).sort((a, b) => orgTypeRows[b] - orgTypeRows[a]);
+  document.getElementById('orgTypeNote').innerHTML = scopeNote('all', `在职 ${active2.length} 人 · 按组织类型`);
+  makeChart('chartOrgType', 'doughnut', orgKeys, [{
+    data: orgKeys.map(k => orgTypeRows[k]),
+    /* tc 的 key 不带 `--` 前缀（themeColors 里 v.slice(2)），写成 tc['--s1'] 会拿到 undefined → 黑色 */
+    backgroundColor: orgKeys.map((_, i) => tc[['s1','s2','s3','s4','s5','s6'][i % 6]]),
+  }], {
+    onClick: (e, els) => { if (els.length) { const k = orgKeys[els[0].index]; if (k) jumpToDetail('orgtype:' + k); } },
+  });
+  orgKeys.forEach(k => reg('orgtype:' + k, '组织类型 · ' + k, d => d.status === '在职' && normOrgType(d.orgType) === k));
+
+  /* ── ② 职级结构（序列 → 职等 → 子等级 下钻，正式员工口径）── */
+  const formalActive = active2.filter(d => staffGroupOf(d) === 'formal');
+  const channelCount = {};
+  formalActive.forEach(d => { const c = seriesChannelOf(d); channelCount[c] = (channelCount[c] || 0) + 1; });
+  const chLabels = Object.keys(channelCount).sort((a, b) => channelCount[b] - channelCount[a]);
+  document.getElementById('levelStructNote').innerHTML = scopeNote('formal', `正式员工 ${formalActive.length} 人 · 序列 → 职等 → 子等级`);
+  barChart('chartSeriesBar', chLabels, [{
+    label: '人数', data: chLabels.map(k => channelCount[k]), color: tc.s2,
+  }], {
+    indexAxis: 'y',
+    onClick: (e, els) => { if (els.length) { const c = chLabels[els[0].index]; if (c) { peopleDrill = { series: c, level: null }; renderLevelDrill(formalActive, tc); } } },
+  });
+  renderLevelDrill(formalActive, tc);
+
+  /* ── ③ 人员变化（本月入职 / 离职 / 净增）── */
+  const joinsThisMonth = base.filter(d => inMonth(d, 'joinDate'));
+  const leavesThisMonth = base.filter(d => inMonth(d, 'leaveDate'));
+  const netChange = joinsThisMonth.length - leavesThisMonth.length;
+  document.getElementById('peopleChangeRow').innerHTML =
+    kpiClick('本月入职', joinsThisMonth.length, `${monthStart.getMonth()+1} 月 1 日至数据更新时间`, '--pos', 'change:join') +
+    kpiClick('本月离职', leavesThisMonth.length, `${monthStart.getMonth()+1} 月 1 日至数据更新时间`, '--neg', 'change:leave') +
+    `<div class="kpi-card"><div class="kpi-label"><span class="kpi-dot" style="background:var(--s5)"></span>净增</div><div class="kpi-value" style="color:${netChange >= 0 ? 'var(--pos)' : 'var(--neg)'}">${netChange >= 0 ? '+' : ''}${netChange}</div><div class="kpi-sub">本月入职 − 本月离职</div></div>`;
+  reg('change:join', '本月入职', d => inMonth(d, 'joinDate'));
+  reg('change:leave', '本月离职', d => inMonth(d, 'leaveDate'));
+
+  /* ── ③ 近 12 个月入离职趋势（全体人员，点击数据点）── */
+  const months = getMonthsList(12);
+  document.getElementById('trend12Note').innerHTML = scopeNote('all', '全体人员 · 按月 · 点击数据点查看名单');
+  lineChart('chartPeopleTrend', months, [
+    { label: '入职', data: countByMonth(base, 'joinDate', months), color: tc.pos },
+    { label: '离职', data: countByMonth(base, 'leaveDate', months), color: tc.neg },
+  ], {
+    onClick: (e, els) => { if (els.length) {
+      const i = els[0].index, ds = els[0].datasetIndex, m = months[i];
+      jumpToDetail(ds === 0 ? 'trend:join:' + m : 'trend:leave:' + m);
+    } },
+  });
+  months.forEach(m => {
+    reg('trend:join:' + m, m + ' 入职', d => d.joinDate && d.joinDate.indexOf(m) === 0);
+    reg('trend:leave:' + m, m + ' 离职', d => d.leaveDate && d.leaveDate.indexOf(m) === 0);
+  });
+
+  /* ── ④ 人员预警（未来 60 天，三卡）── */
+  const probationDue = active2.filter(d => {
+    if (d.empType !== '试用期') return false;
+    let p = toDate(d.probationEnd);
+    if (!p) { const j = toDate(d.joinDate); if (!j) return false; p = new Date(j.getTime() + 183 * 86400000); }
+    return p >= now && p <= in60;
+  });
+  const contractDue = active2.filter(d => { const c = toDate(d.contractEnd); return c && c >= now && c <= in60; });
+  const leaveSoon = active2.filter(d => { const l = toDate(d.leaveDate); return l && l >= now && l <= in60; });
+  document.getElementById('peopleAlertRow').innerHTML =
+    kpiClick('近期转正', probationDue.length + ' 人', '未来 60 天试用期届满', '--s2', 'alert:probation60') +
+    kpiClick('合同到期', contractDue.length + ' 人', '未来 60 天合同到期', '--s6', 'alert:contract60') +
+    kpiClick('近期离职', leaveSoon.length + ' 人', '未来 60 天已确定离职', '--s4', 'alert:leave60');
+  reg('alert:probation60', '未来 60 天试用期届满', d => probationDue.includes(d));
+  reg('alert:contract60', '未来 60 天合同到期', d => contractDue.includes(d));
+  reg('alert:leave60', '未来 60 天已确定离职', d => leaveSoon.includes(d));
+}
+
+/* 职级下钻面板：序列 → 职等 → 子等级 → 名单（全数据驱动，不假设任何序列名） */
+function renderLevelDrill(formalActive, tc) {
+  const panel = document.getElementById('drillPanel');
+  if (!panel) return;
+  const st = peopleDrill;
+  if (!st.series) { panel.innerHTML = ''; return; }
+  const pop = formalActive.filter(d => seriesChannelOf(d) === st.series);
+  const levelMap = {};
+  pop.forEach(d => { const lv = d.level || '（未填）'; levelMap[lv] = (levelMap[lv] || 0) + 1; });
+  const levels = Object.keys(levelMap).sort((a, b) => sortLevels([a, b])[0] === a ? -1 : 1);
+
+  let html = `<div class="drill-head">
+      <button class="link-btn mi-btn" onclick="resetLevelDrill()"><span class="mi">arrow_back</span>序列</button>
+      <span class="drill-crumb">${esc(st.series)}</span>
+      ${st.level ? `<span class="drill-crumb">→</span><span class="drill-crumb strong">${esc(st.level)}</span>` : ''}
+      <span class="chart-note">${pop.length} 人 · 点击职等 / 子等级查看名单</span>
+    </div><div class="drill-chips">`;
+  const chip = (label, n, click) => `<button class="drill-chip" onclick="${click}">${esc(label)}<span class="drill-count">${n}</span></button>`;
+  if (st.level) {
+    /* 第三层：子等级（数据里有子等级就展示，没有则直接到名单） */
+    const subPop = pop.filter(d => (d.level || '（未填）') === st.level);
+    html += chip('全部', subPop.length, `jumpToDetail('drill:${st.series}:${encodeURIComponent(st.level)}')`);
+    const hasSub = subPop.some(d => d.subLevel);
+    if (hasSub) {
+      const subMap = {};
+      subPop.forEach(d => { const s = d.subLevel || '未填'; subMap[s] = (subMap[s] || 0) + 1; });
+      Object.keys(subMap).sort().forEach(s => html += chip(s, subMap[s], `jumpToDetail('drill:${st.series}:${encodeURIComponent(st.level)}:${encodeURIComponent(s)}')`));
+    }
+  } else {
+    /* 第二层：职等 */
+    levels.forEach(lv => {
+      if (lv === '（未填）') { html += chip('未填职等', levelMap[lv], `jumpToDetail('drill:${st.series}:NA')`); return; }
+      html += chip(lv, levelMap[lv], `peopleDrill={series:'${jsStr(st.series)}',level:'${encodeURIComponent(lv)}'};renderLevelDrill(window.__formalActive||[],window.__drillTc);`);
+    });
+  }
+  html += '</div>';
+  panel.innerHTML = html;
+  /* 供内联 onclick 取数（renderPeople 每次刷新已重算，这里缓存一份） */
+  window.__formalActive = formalActive;
+  window.__drillTc = tc;
+}
+function resetLevelDrill() { peopleDrill = { series:null, level:null }; const p = document.getElementById('drillPanel'); if (p) p.innerHTML = ''; }

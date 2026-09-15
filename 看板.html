@@ -7,11 +7,11 @@
 <title>HR 数据看板</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='700' fill='white' text-anchor='middle' font-family='sans-serif'%3EHR%3C/text%3E%3C/svg%3E" data-page-node-id="YnyqME1QhUmeSqcFeoytes">
 <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('hr8-theme')||'light');</script>
-<script src="vendor/chart.umd.min.js"></script>
-<script src="vendor/xlsx.full.min.js"></script>
-<link rel="stylesheet" href="vendor/noto-sans-sc.css" data-page-node-id="fontNoto">
-<link rel="stylesheet" href="vendor/material-symbols.css" data-page-node-id="fontIcons">
-<link rel="stylesheet" href="css/style.css" data-page-node-id="XpkfEPX7G7wTdXZY8SDvdG">
+<script src="assets/vendor/chart.umd.min.js"></script>
+<script src="assets/vendor/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="assets/vendor/noto-sans-sc.css" data-page-node-id="fontNoto">
+<link rel="stylesheet" href="assets/vendor/material-symbols.css" data-page-node-id="fontIcons">
+<link rel="stylesheet" href="assets/css/style.css" data-page-node-id="XpkfEPX7G7wTdXZY8SDvdG">
 </head>
 <body data-page-node-id="IVHGntJ1ATLG8nwYcCkDMx">
 <div class="app" data-page-node-id="wJTDFRwez5B8GllPawM4A1">
@@ -22,17 +22,82 @@
       <div class="brand-mark" data-page-node-id="1TS3C7w8MtAfky7kkn6NHw">HR</div>
       <div data-page-node-id="Ic7ijbEYa6imEtKr1zsWVI"><div class="brand-name" data-page-node-id="bw1JnCF7Abb0xwHBsCVFxN">人力数据看板</div><div class="brand-sub" data-page-node-id="faJhIxAzVo53GuY328LGYW">HRBP 工作台</div></div>
     </div>
-    <nav class="nav" data-page-node-id="z8PtxTpuD5Iv3sFAsxUop4">
-      <button class="nav-item active" data-page="overview" onclick="switchPage('overview')" data-page-node-id="hTgO1aYhL0HoHDwGC4rEne"><span class="ico" data-page-node-id="NF0hgS9j1sksaXv1vyGo4j"><span class="mi">dashboard</span></span>总览</button>
-      <button class="nav-item" data-page="structure" onclick="switchPage('structure')" data-page-node-id="m90GdY4pqtL9rPBCCzoUpX"><span class="ico" data-page-node-id="u0MunhqtUc3JbHfXB9zpLS"><span class="mi">account_tree</span></span>组织与用工</button>
-      <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')" data-page-node-id="rd8fb5jgoiUAJSwN7UJNfL"><span class="ico" data-page-node-id="OI7vB4CAoC9tfpW6LGfnhR"><span class="mi">groups</span></span>人员结构</button>
-      <button class="nav-item" data-page="turnover" onclick="switchPage('turnover')" data-page-node-id="EKEWoulxE5HZgQYbFHlBFT"><span class="ico" data-page-node-id="STrFdlbeCEcYHxaxvk1z1w"><span class="mi">swap_horiz</span></span>人员流动</button>
-      <button class="nav-item" data-page="ops" onclick="switchPage('ops')" data-page-node-id="r1bZ4ezY4xY5B7KtfafBDq"><span class="ico" data-page-node-id="1oED3kyC0IFMaSO9Hd4u1b"><span class="mi">task_alt</span></span>转正与合同</button>
-      <button class="nav-item" data-page="talent" onclick="switchPage('talent')" data-page-node-id="q0KSX3OR0XO42zdimjG1LP"><span class="ico" data-page-node-id="M3lsDyOEAnLjVIyeoXulCy"><span class="mi">military_tech</span></span>梯队绩效盘点</button>
-      <button class="nav-item" data-page="health" onclick="switchPage('health')" data-page-node-id="hDhna7berGGndltNQclZuJ"><span class="ico" data-page-node-id="uULo1TGnAs4CyN8mWwZeAK"><span class="mi">stairs</span></span>职级健康度</button>
-      <div class="nav-divider" data-page-node-id="ledgerDivider">日常办公</div>
-      <button class="nav-item" data-page="ledger" onclick="switchPage('ledger')" data-page-node-id="ledgerNav"><span class="ico" data-page-node-id="ledgerIco"><span class="mi">assignment</span></span>HR 工作台账</button>
-      <button class="nav-item" data-page="employee" onclick="switchPage('employee')" data-page-node-id="7MC3IlTci0euZ9P3l3oq2E"><span class="ico" data-page-node-id="VMVQqSAkkjVKuJwp8IOmkx"><span class="mi">table_view</span></span>员工明细<span class="nav-badge" id="navBadge" data-page-node-id="4E4cVfAqxmn0cZHEw33urO"></span></button>
+    <nav class="nav" id="mainNav">
+      <button class="nav-item active" data-page="overview" onclick="switchPage('overview')"><span class="ico"><span class="mi">dashboard</span></span>总览</button>
+
+      <!-- 人员管理 -->
+      <div class="nav-group" data-group="people">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">badge</span></span>人员管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="people" onclick="switchPage('people')">人员概览</button>
+          <button class="nav-item" data-page="move" onclick="switchPage('move')">人员异动</button>
+          <button class="nav-item" data-page="employee" onclick="switchPage('employee')">人员明细<span class="nav-badge" id="navBadge"></span></button>
+        </div>
+      </div>
+
+      <!-- 招聘管理 -->
+      <div class="nav-group" data-group="recruit">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">manage_search</span></span>招聘管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="recruit_overview" onclick="switchPage('recruit_overview')">招聘概览</button>
+          <button class="nav-item" data-page="recruit_need" onclick="switchPage('recruit_need')">招聘需求</button>
+        </div>
+      </div>
+
+      <!-- 校招管理 -->
+      <div class="nav-group" data-group="campus">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">school</span></span>校招管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="campus_overview" onclick="switchPage('campus_overview')">校招概览</button>
+          <button class="nav-item" data-page="campus_need" onclick="switchPage('campus_need')">校招需求</button>
+          <button class="nav-item" data-page="campus_emp" onclick="switchPage('campus_emp')">校招生</button>
+        </div>
+      </div>
+
+      <!-- 人才梯队 -->
+      <div class="nav-group" data-group="talent">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">military_tech</span></span>人才梯队<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="talent_overview" onclick="switchPage('talent_overview')">人才概览</button>
+          <button class="nav-item" data-page="talent_list" onclick="switchPage('talent_list')">梯队名单</button>
+          <button class="nav-item" data-page="talent_perf" onclick="switchPage('talent_perf')">梯队绩效</button>
+        </div>
+      </div>
+
+      <!-- 干部梯队 -->
+      <div class="nav-group" data-group="cadre">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">workspace_premium</span></span>干部梯队<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="cadre_overview" onclick="switchPage('cadre_overview')">干部概览</button>
+          <button class="nav-item" data-page="cadre_list" onclick="switchPage('cadre_list')">干部名单</button>
+          <button class="nav-item" data-page="cadre_perf" onclick="switchPage('cadre_perf')">干部绩效</button>
+        </div>
+      </div>
+
+      <!-- 绩效管理 -->
+      <div class="nav-group" data-group="perf">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">speed</span></span>绩效管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="perf_overview" onclick="switchPage('perf_overview')">绩效概览</button>
+          <button class="nav-item" data-page="perf_alert" onclick="switchPage('perf_alert')">绩效预警</button>
+        </div>
+      </div>
+
+      <!-- 外包管理 -->
+      <div class="nav-group" data-group="outsource">
+        <button class="nav-group-head" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">handshake</span></span>外包管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+        <div class="nav-sub">
+          <button class="nav-item" data-page="outsource_overview" onclick="switchPage('outsource_overview')">外包概览</button>
+          <button class="nav-item" data-page="outsource_emp" onclick="switchPage('outsource_emp')">外包人员</button>
+          <button class="nav-item" data-page="outsource_eval" onclick="switchPage('outsource_eval')">外包评价</button>
+        </div>
+      </div>
+
+      <div class="nav-divider">日常办公</div>
+      <button class="nav-item" data-page="structure" onclick="switchPage('structure')"><span class="ico"><span class="mi">account_tree</span></span>组织与用工</button>
+      <button class="nav-item" data-page="demographics" onclick="switchPage('demographics')"><span class="ico"><span class="mi">groups</span></span>人员结构</button>
+      <button class="nav-item" data-page="health" onclick="switchPage('health')"><span class="ico"><span class="mi">stairs</span></span>职级健康度</button>
+      <button class="nav-item" data-page="ledger" onclick="switchPage('ledger')"><span class="ico"><span class="mi">assignment</span></span>HR 工作台账</button>
     </nav>
     <div class="side-foot" data-page-node-id="aQuSAIJnGoWX4sjYgJG5kJ">
       <button class="side-theme" onclick="toggleTheme()" id="themeBtn" title="切换深浅色主题" data-page-node-id="yy2rahAsY3sOGuIzRbTN0R"><span class="ico" data-page-node-id="themeIcoWrap"><span class="mi" id="themeIco">dark_mode</span></span><span id="themeLabel">深色模式</span></button>
@@ -50,6 +115,7 @@
       <button class="tb-btn no-print mi-btn" onclick="uploadEmpData()" data-page-node-id="kDnLSCUbNLCaEQhizY9mEK"><span class="btn-dot" id="empDot" data-page-node-id="BmjFjxpO7yBSIs9oNIcZUM"></span><span class="mi">upload</span>上传人员数据</button>
       <button class="tb-btn no-print mi-btn" onclick="uploadPerfData()" data-page-node-id="4AeiFRQ8KFYGQOlONbnsuR"><span class="btn-dot" id="perfDot" data-page-node-id="o4VUMy8f9vPAMyuEzsQ9ID"></span><span class="mi">upload</span>上传绩效数据</button>
       <button class="tb-btn no-print mi-btn" onclick="uploadLedgerData()" data-page-node-id="ledgerUploadBtn"><span class="btn-dot" id="ledgerDot" data-page-node-id="ledgerDot"></span><span class="mi">upload</span>上传台账</button>
+      <button class="tb-btn no-print mi-btn" onclick="toggleDataPanel()" data-page-node-id="dataBtn" title="数据包 / 保存 / 导出分享版"><span class="btn-dot" id="dsDot" data-page-node-id="dsDot"></span><span class="mi">database</span>数据维护</button>
       <button class="tb-btn no-print mi-btn" onclick="switchPage('brief')" data-page-node-id="vKTZVu13FMCZjPpKF0LZ3h"><span class="mi">summarize</span>简报模式</button>
     </header>
 
@@ -103,6 +169,52 @@
           </div>
         </section>
 
+        <!-- ═══ 人员概览（新）═══ -->
+        <section class="page hidden" id="page-people">
+          <div class="module-head"><h3><span class="mi">people</span>人员规模</h3><span class="chart-note" id="peopleScaleNote">截至数据更新时间 · 较上月变化暂缺历史快照</span></div>
+          <div class="kpi-row" id="peopleScaleRow"></div>
+
+          <div class="module-head"><h3><span class="mi">donut_large</span>人员结构</h3></div>
+          <div class="chart-grid">
+            <div class="chart-card">
+              <div class="chart-header"><h3>部门结构</h3><span class="chart-note" id="deptStructNote">点击部门查看名单</span></div>
+              <div class="chart-box" style="height:480px;cursor:pointer"><canvas id="chartPeopleDept"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-header"><h3>前 / 中 / 后台</h3><span class="chart-note" id="orgTypeNote">按组织类型 · 全体人员</span></div>
+              <div class="chart-box" style="cursor:pointer"><canvas id="chartOrgType"></canvas></div>
+            </div>
+            <div class="chart-card">
+              <div class="chart-header"><h3>职级结构 <span class="mi" style="font-size:13px;color:var(--ink-3)">manage_search</span></h3><span class="chart-note" id="levelStructNote">正式员工 · 序列 → 职等 → 子等级 → 名单</span></div>
+              <div id="levelDrill">
+                <div class="chart-box tall"><canvas id="chartSeriesBar"></canvas></div>
+                <div id="drillPanel"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="module-head"><h3><span class="mi">swap_horiz</span>人员变化</h3><span class="chart-note" id="peopleChangeNote">全体人员 · 本月 = 数据更新所在月</span></div>
+          <div class="kpi-row" id="peopleChangeRow"></div>
+          <div class="chart-card wide">
+            <div class="chart-header"><h3>近 12 个月入离职趋势</h3><span class="chart-note" id="trend12Note">全体人员 · 点击数据点查看名单</span></div>
+            <div class="chart-box" style="cursor:pointer"><canvas id="chartPeopleTrend"></canvas></div>
+          </div>
+
+          <div class="module-head"><h3><span class="mi">notifications_active</span>人员预警</h3><span class="chart-note" id="peopleAlertNote">未来 60 天 · 点击查看名单</span></div>
+          <div class="kpi-row" id="peopleAlertRow"></div>
+        </section>
+
+        <!-- ═══ 建设中（占位）═══ -->
+        <section class="page hidden" id="page-placeholder">
+          <div class="ph-card">
+            <div class="ph-icon"><span class="mi">construction</span></div>
+            <h3 id="phTitle">建设中</h3>
+            <p id="phDesc">该模块正在建设中，敬请期待。</p>
+            <p class="ph-sub" id="phHint"></p>
+            <button class="tb-btn primary mi-btn" onclick="switchPage('people')"><span class="mi">arrow_back</span>返回人员概览</button>
+          </div>
+        </section>
+
         <!-- ═══ 组织与用工 ═══ -->
         <section class="page hidden" id="page-structure" data-page-node-id="NAGu4GW4DNkVFE62siI82L">
           <div class="kpi-row" id="structureKpiRow" data-page-node-id="ptpmcDTChs5B0LTa59Upfv"></div>
@@ -111,6 +223,7 @@
             <div class="chart-card" data-page-node-id="qwePesYbsZYxPu7iDn6TZu"><div class="chart-header" data-page-node-id="rA9SINm5cnB8QgbHTBhHkD"><h3 data-page-node-id="cUVMIHMi9BCx3P8b0vbU2J">岗位序列分布</h3><span class="chart-note" data-page-node-id="ABemb4CiNWAKKHsWBhBfe5">归一化命名</span></div><div class="chart-box" data-page-node-id="gV7BpFF2iPDvJ62512AcdY"><canvas id="chartSeries" data-page-node-id="B1GDtptdxRcGVs1pleo6K5"></canvas></div></div>
             <div class="chart-card" data-page-node-id="rVE27zPeyFS40GUoayOSBO"><div class="chart-header" data-page-node-id="UVqzNaeTKCeYnK9IwpCsYD"><h3 data-page-node-id="KHdP70w0d52GGRrNd1eDCb">用工类型 × 职级</h3><span class="chart-note" data-page-node-id="7RjCElYGY4fE9WOQuWdfaB">6 类全收 · 全员</span></div><div class="chart-box" data-page-node-id="DwAmwwD5EOXQbE7DJbOiLL"><canvas id="chartEmpTypeLevel" data-page-node-id="uw7jTrqEGwsXpzd1kmAQOS"></canvas></div></div>
             <div class="chart-card" data-page-node-id="KFG9M60VMAeYR31jWAnjVR"><div class="chart-header" data-page-node-id="PERSv3xBGweMZiFqpAoFHl"><h3 data-page-node-id="ibCaNxVGsEg6vRgmcaw4hY">各中心用工类型对比</h3><span class="chart-note" data-page-node-id="qBEhZwok0JLkEv8ypun4IW">堆积 · 全员</span></div><div class="chart-box" data-page-node-id="dBNQPHhdbeKq5C9O8oaaGu"><canvas id="chartCenterType" data-page-node-id="0FnLogDFKXTbBRXOeZxj0t"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="budgetGapCard"><div class="chart-header" data-page-node-id="budgetGapHead"><h3 data-page-node-id="budgetGapTitle">部门编制缺口</h3><span class="chart-note" data-page-node-id="budgetGapNote">手工数据源 · 已到位 + 缺口</span></div><div class="chart-box" data-page-node-id="budgetGapBox"><canvas id="chartBudgetGap" data-page-node-id="chartBudgetGap"></canvas></div></div>
           </div>
           <div class="list-card" style="margin-top:14px" data-page-node-id="deptMatrixCard">
             <h3>部门透视表 <span class="chart-note" id="deptMatrixNote">二级部门 · 离职率与司龄为正式员工口径</span></h3>
@@ -234,11 +347,37 @@
 
 <div id="filterPopup" class="filter-popup" data-page-node-id="ujCbriBJgqNXV9e32tPSqd"></div>
 
-<script src="js/core.js"></script>
-<script src="js/ledger.js"></script>
-<script src="js/pages.js"></script>
-<script src="js/table.js"></script>
-<script src="js/alerts.js"></script>
-<script src="js/data.js"></script>
+<!-- ═══ 数据维护面板 ═══ -->
+<div id="dataPanelOverlay" class="dp-overlay hidden" onclick="toggleDataPanel(false)"></div>
+<div id="dataPanel" class="data-panel hidden no-print">
+  <div class="dp-head">
+    <h3><span class="mi">database</span>数据维护</h3>
+    <button class="dp-icon-btn" onclick="toggleDataPanel(false)" title="关闭"><span class="mi">close</span></button>
+  </div>
+  <div class="dp-info" id="dataPanelInfo"></div>
+  <div class="dp-actions">
+    <div class="dp-group"><span class="mi">sync</span>更新数据</div>
+    <button class="dp-btn dp-primary dp-need-fs" id="dpReadFolder" onclick="reloadFromDataFolder()"><span class="mi">folder_open</span><span><b>从 data 文件夹读取最新数据</b><i>读 data/HR看板数据源.xlsx · 改完 Excel 点一下就读到 · 只需授权一次</i></span></button>
+    <button class="dp-btn" id="dsBtn" onclick="reloadDataSource()"><span class="mi">refresh</span><span><b>回到数据包</b><i>丢弃当前改动，读回 assets/hr-data.js</i></span></button>
+    <button class="dp-btn dp-need-fs" id="dpSavePack" onclick="saveDataPack()"><span class="mi">save</span><span><b>把当前数据保存为数据包</b><i>写入 assets/hr-data.js，以后双击打开就是这份</i></span></button>
+    <div class="dp-group"><span class="mi">ios_share</span>分享给 SWC 管理人员</div>
+    <button class="dp-btn dp-need-fs" id="dpExportRoster" onclick="exportSharePackByRoster()"><span class="mi">badge</span><span><b>用花名册导出分享版</b><i>按汇总表里的「SWC花名册」裁 · 删掉名单里的某行 = 不发这个人</i></span></button>
+    <button class="dp-btn dp-need-fs" id="dpExportShare" onclick="exportSharePack()"><span class="mi">filter_alt</span><span><b>导出分享版数据（仅 SWC）</b><i>按「一级部门英文简称 = SWC」自动裁</i></span></button>
+    <button class="dp-btn dp-need-fs" onclick="exportSharePackWithFile()"><span class="mi">person_search</span><span><b>用指定名单导出分享版</b><i>临时选一份 Excel 来裁，不影响当前数据</i></span></button>
+    <div class="dp-group"><span class="mi">build</span>其它</div>
+    <button class="dp-btn dp-danger" onclick="clearSnapshot()"><span class="mi">delete_sweep</span><span><b>清空浏览器缓存</b><i>下次打开会重新从数据包加载</i></span></button>
+  </div>
+  <div class="dp-note" id="dataPanelNote"></div>
+</div>
+
+<script src="assets/hr-data.js"></script>
+<script src="assets/js/core.js"></script>
+<script src="assets/js/ledger.js"></script>
+<script src="assets/js/datasource.js"></script>
+<script src="assets/js/pages.js"></script>
+<script src="assets/js/table.js"></script>
+<script src="assets/js/alerts.js"></script>
+<script src="assets/js/data.js"></script>
+<script src="assets/js/grid.js"></script>
 </body>
 </html>

@@ -23,6 +23,7 @@ const EMP_COLS = [
   { key:'equity', label:'股权激励' }, { key:'source', label:'招聘来源' }, { key:'mentor', label:'导师' },
   { key:'email', label:'公司邮箱' }, { key:'payGroup', label:'工资组' },
   { key:'perfFinal', label:'最新绩效' }, { key:'perfRank', label:'推荐排名' }, { key:'perfCoeff', label:'投入系数' },
+  { key:'duty', label:'工作内容' },   // 来自 Excel「工作分工」sheet，按工号 join；没填内容的整列为空
 ];
 
 let columnFilters = {};
@@ -43,6 +44,7 @@ function empColValue(d, k) {
     case 'perfFinal': return d.hasPerf ? (latestGrade(d.perf) || '') : '';
     case 'perfRank': return (d.perf && d.perf.rank) || '';
     case 'perfCoeff': return (d.perf && d.perf.inputCoeff) ? d.perf.inputCoeff.toFixed(2) : '';
+    case 'duty': return (typeof dsData !== 'undefined' && dsData.dutyMap && dsData.dutyMap[d.id]) || '';
     default: { const v = d[k]; return v == null || v === '' ? '' : String(v); }
   }
 }
@@ -141,6 +143,10 @@ function renderEmployeeTable(sortByField) {
       if (k === 'perfFinal') return d.hasPerf ? `<td>${gradeTag(latestGrade(d.perf))}</td>` : '<td>—</td>';
       if (k === 'perfRank') return `<td>${esc(d.perf && d.perf.rank) || '—'}</td>`;
       if (k === 'perfCoeff') return `<td>${d.perf && d.perf.inputCoeff ? d.perf.inputCoeff.toFixed(2) : '—'}</td>`;
+      if (k === 'duty') {
+        const v = (typeof dsData !== 'undefined' && dsData.dutyMap && dsData.dutyMap[d.id]) || '';
+        return `<td class="wrap" style="white-space:normal;min-width:160px;max-width:320px;line-height:1.5">${v ? esc(v) : '—'}</td>`;
+      }
       const v = d[k];
       return `<td>${v != null && v !== '' ? esc(v) : '—'}</td>`;
     }).join('') + '</tr>';
