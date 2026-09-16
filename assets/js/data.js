@@ -545,7 +545,7 @@ function refreshAll() {
   const allActive = rawData.filter(d => d.status === '在职');
   /* 离职人数必须和「在职」用同一个筛选口径。
      以前这里是 rawData（全库离职），于是「各中心编制分布」的同一根堆叠柱里，
-     在职那截是筛选后的 311 人、已离职那截却是全公司的 1348 人 —— 两个数不同源 */
+     在职那截是筛选后的人数、已离职那截却是全公司的人数 —— 两个数不同源 */
   const allLeavers = filtered.filter(d => d.status === '离职');
   const relevantAll = getScopeData();   // 不含日期/用工细筛的上下文（用于离职率分母）
   updateFilterStat();

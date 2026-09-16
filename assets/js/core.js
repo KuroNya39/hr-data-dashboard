@@ -194,7 +194,7 @@ function toDate(v){ if(!v) return null; const d = new Date(v); return isNaN(d.ge
 function calcTenure(jd) { const d = toDate(jd); if (!d) return 0; return (Date.now()-d.getTime())/(365.25*86400000); }
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
-/* 合同类型兜底：KPA 实测仅 301/311 有值，空值按用工类别推断 */
+/* 合同类型兜底：KPA 实测该列绝大多数为空，空值按用工类别推断 */
 function inferContractType(empType) {
   if (empType === '签约实习生' || empType === '非签约实习生') return '实习协议';
   if (empType === '外包人员') return '外包服务协议';

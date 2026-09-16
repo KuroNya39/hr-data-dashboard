@@ -177,7 +177,7 @@ function toggleFilterPopup(colKey, colLabel, thEl) {
   if (colKey === 'rowNum') return;
 
   /* 候选值 = 其他列筛选 + 搜索框命中之后剩下的行。
-     以前这里只做了列筛选、没管搜索框，于是会出现「表格里 37 人、弹窗上写着全选 867」的矛盾。
+     以前这里只做了列筛选、没管搜索框，于是会出现「表格里只剩几行、弹窗上却写着全选多少人」的矛盾。
      本列自己的筛选不复用（要让你能改） */
   let rows = getFilteredEmployees();
   const q = (document.getElementById('empSearch').value || '').toLowerCase().trim();
