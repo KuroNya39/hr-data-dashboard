@@ -96,15 +96,15 @@ function hasPack() {
   return !!(typeof window !== 'undefined' && window.HR_DATA && window.HR_DATA.books && window.HR_DATA.books.emp);
 }
 
-/* 台账工作簿识别（SWC最新人才现状-*.xlsx，9 个业务 sheet） */
+/* 台账工作簿识别（汇总表里的台账 sheet，按关键字认表） */
 const LEDGER_SIGNALS = ['组织架构','人员情况','校招需求','外包名单','外包评价','入职名单','招聘未达成','储备干部','高潜','部门梯队','C型干部','校招名单'];
 function looksLikeLedger(wb) {
   return wb.SheetNames.filter(sn => LEDGER_SIGNALS.some(s => sn.includes(s))).length >= 2;
 }
 
-/* ═══════════ 汇总表（data/SWC人力看板.xlsx，2026-09-12 晚起）═══════════
+/* ═══════════ 汇总表（data/ 下手工维护的那张，表名见 bu-config.js 的 book）═══════════
    用户手工维护的唯一原数据表（13 张 sheet），人员花名册基准仍是 data/KPA*.xls：
-     SWC人员名单（分享白名单，用户从 KPA 手动复制） /
+     花名册 sheet（分享白名单，用户从 KPA 手动复制） /
      干部梯队·人才梯队 26H1绩效考评明细 / 绩效B-C人员情况 /
      C型干部名单 · 储备干部名单 · 高潜名单 · 招聘未达成需求 · 27届校招需求 ·
      26届校招名单 · 本年度入职名单 · 外包评价 · 部门梯队
@@ -114,12 +114,13 @@ function looksLikeLedger(wb) {
 
    ⚠ 这一组谓词必须和 工具/生成数据包.js 里的 SHEET 逐字一致，
      否则「生成数据包」和「从 data 文件夹读取」会读出不同结果。
-   ⚠ isRosterSheet 用 ^SWC人员名单 锚定：本年度入职名单 / 高潜名单 / C型干部名单
-     都含「名单」，宽松匹配会把它们误当分享白名单。 */
-const CONSOLIDATED_NAME = 'SWC人力看板.xlsx';
+   ⚠ isRosterSheet 的花名册名必须**锚定 sheet 名开头**（名单见 bu-config.js 的 rosterSheet）：
+     本年度入职名单 / 高潜名单 / C型干部名单 都含「名单」，
+     宽松匹配会把它们误当分享白名单。 */
+const CONSOLIDATED_NAME = BU.book;
 const isEmpSheet    = sn => /^人员数据/.test(sn);
 const isPerfSheet   = sn => /绩效考评明细/.test(sn);
-const isRosterSheet = sn => /^SWC人员名单/.test(sn) || /花名册/.test(sn);
+const isRosterSheet = sn => BU.rosterSheet.test(sn) || /花名册/.test(sn);
 const isManualSheet = sn => /^(部门编制|指标目标|月度快照|招聘计划|工作分工)$/.test(sn);
 const isLedgerSheet = sn => !/绩效考评明细/.test(sn) && LEDGER_SIGNALS.some(s => sn.includes(s));
 function looksLikeConsolidated(wb) {
@@ -162,7 +163,7 @@ async function ingestConsolidated(wb, stats) {
     stats.currentName = CONSOLIDATED_NAME;
     await ingestWorkbook(ew, stats);
   }
-  /* ④ 手工四张表 + SWC花名册 */
+  /* ④ 手工四张表 + 花名册 */
   const mw = subWorkbook(wb, sn => isManualSheet(sn) || isRosterSheet(sn));
   if (mw.SheetNames.length) {
     try {
@@ -172,13 +173,13 @@ async function ingestConsolidated(wb, stats) {
     } catch (e) { console.warn('汇总表·手工数据源解析失败：', e); }
   }
 }
-/* 从已加载的数据包里取 SWC花名册的工号集合（分享时「发谁不发谁」的名单） */
+/* 从已加载的数据包里取花名册的工号集合（分享时「发谁不发谁」的名单） */
 function rosterIdsFromPack() {
   const packs = [];
   if (_packedBooks.manual) packs.push(_packedBooks.manual);
   if (window.HR_DATA && window.HR_DATA.books && window.HR_DATA.books.manual) packs.push(window.HR_DATA.books.manual);
   for (const sheets of packs) {
-    const hit = (sheets || []).find(([n]) => /^SWC人员名单/.test(n) || /花名册/.test(n));
+    const hit = (sheets || []).find(([n]) => BU.rosterSheet.test(n) || /花名册/.test(n));
     if (!hit) continue;
     const aoa = hit[1] || [];
     if (aoa.length < 2) continue;
@@ -332,19 +333,19 @@ async function onDataLoaded(restored) {
   buildDeptPairs();                 // 部门标签须先于筛选器填充
   populateStaticFilters();
   refreshFilterOptions('__init__');
-  lockDefaultCenter();              // 默认锁定 SWC（可在筛选器切换）
+  lockDefaultCenter();              // 默认锁定本部门（可在筛选器切换）
   updatePerfStatus();
   if (!restored) dataSavedAt = nowStamp();
   refreshAll();
   if (!restored) await saveSnapshot();
 }
-/* 默认中心锁定 SWC：仅当当前为「全部」且数据里存在 SWC */
+/* 默认中心锁定本部门：仅当当前为「全部」且数据里存在本部门代号 */
 function lockDefaultCenter(force) {
   const sel = document.getElementById('filterCenter');
   if (!sel) return;
-  const hasSWC = [...sel.options].some(o => o.value === 'SWC');
-  if (hasSWC && (force || sel.value === 'all')) {
-    sel.value = 'SWC';
+  const hasTarget = [...sel.options].some(o => o.value === BU.code);
+  if (hasTarget && (force || sel.value === 'all')) {
+    sel.value = BU.code;
     refreshFilterOptions('center');
   }
 }
@@ -731,14 +732,14 @@ async function saveDataPack() {
   }
 }
 
-/* ② 裁出「仅 SWC」，导出给同事的分享版数据包 → 分享版/assets/hr-data.js
-   empSheetsOverride：可选。传了就用这份人员数据裁（例如你单独维护的 SWC 花名册），
+/* ② 裁出「仅本部门」，导出给同事的分享版数据包 → 分享版/assets/hr-data.js
+   empSheetsOverride：可选。传了就用这份人员数据裁（例如你单独维护的花名册），
    否则用当前看板上的数据裁。
    rosterIds：可选。传了就是「工号白名单」模式 —— 只保留名单里的工号，
-   与中心列无关（她手动维护的 SWC花名册就是干这个的）。
-   不传则按「一级部门英文简称 === SWC」自动裁。 */
-function buildSwcPackText(empSheetsOverride, rosterIds) {
-  const TARGET = 'SWC';
+   与中心列无关（手动维护的花名册就是干这个的）。
+   不传则按「一级部门英文简称 === 本部门代号」自动裁。 */
+function buildSharePackText(empSheetsOverride, rosterIds) {
+  const TARGET = BU.code;
   const base = (window.HR_DATA && window.HR_DATA.books) || {};
   const empSrc = empSheetsOverride || _packedBooks.emp || base.emp;
   if (!empSrc) return null;
@@ -772,7 +773,7 @@ function buildSwcPackText(empSheetsOverride, rosterIds) {
     });
     return [name, aoa.slice(0, h + 1).concat(keep)];
   });
-  /* 绩效按 SWC 工号白名单裁 */
+  /* 绩效按本部门工号白名单裁 */
   const ids = new Set();
   empOut.forEach(([, aoa]) => {
     const header = aoa[0] || [];
@@ -807,13 +808,13 @@ function buildSwcPackText(empSheetsOverride, rosterIds) {
     ledger: _packedBooks.ledger || base.ledger || null,
     manual: _packedBooks.manual || base.manual || null,
   };
-  const pack = { v: 1, scope: 'swc', built: new Date().toISOString(),
+  const pack = { v: 1, scope: BU.scope, built: new Date().toISOString(),
     files: Object.assign({}, (window.HR_DATA && window.HR_DATA.files) || {}), books };
-  const text = '/* 自动生成，请勿手动编辑。分享版：只含 SWC 中心 */\n'
+  const text = '/* 自动生成，请勿手动编辑。分享版：只含本部门 */\n'
              + 'window.HR_DATA=' + JSON.stringify(pack) + ';\n';
-  /* 安全自检：判据只有一个 —— 
+  /* 安全自检：判据只有一个 ——
        白名单模式：产出的每一行，工号必须在名单里；
-       自动模式：决定中心归属的那一列的值必须是 SWC。
+       自动模式：决定中心归属的那一列的值必须是本部门代号。
      千万不要对整个 JSON 做全文正则：别的字段里会出现与中心简称同名的值，
      成本中心描述里也可能包含其他中心的字样 —— 全文扫会一堆误报，
      结果就是每次都判定「有泄漏」、分享版永远导不出去。 */
@@ -835,7 +836,7 @@ function buildSwcPackText(empSheetsOverride, rosterIds) {
       });
       return;
     }
-    if (ci < 0) { leak++; return; }          // 找不到中心列 —— 无法保证只有 SWC，按不合格处理
+    if (ci < 0) { leak++; return; }          // 找不到中心列 —— 无法保证只有本部门，按不合格处理
     aoa.slice(h + 1).forEach(r => {
       if (!r || !r.length) return;
       if (String(r[ci] == null ? '' : r[ci]).trim() !== TARGET) leak++;
@@ -847,12 +848,12 @@ function buildSwcPackText(empSheetsOverride, rosterIds) {
 
 /* 写分享版数据包（导出分享版 / 用花名册导出 / 用指定文件导出，三条路共用） */
 async function writeSharePack(empSheetsOverride, sourceLabel, rosterIds) {
-  const r = buildSwcPackText(empSheetsOverride, rosterIds);
+  const r = buildSharePackText(empSheetsOverride, rosterIds);
   if (!r) { showToast('没有可用的名单，无法生成分享版', true); return; }
   if (r.kept === 0) {
     showToast(rosterIds
-      ? '裁剪后一个人都没有：SWC花名册里的工号在人员数据里一个都没匹配上（核对「员工编号」列）'
-      : '裁剪后一个人都没有：这份数据里不含 SWC 中心（检查「一级部门英文简称」列）', true);
+      ? '裁剪后一个人都没有：花名册里的工号在人员数据里一个都没匹配上（核对「员工编号」列）'
+      : '裁剪后一个人都没有：这份数据里不含本部门（检查「一级部门英文简称」列）', true);
     return;
   }
   if (r.leak > 0) {
@@ -879,18 +880,18 @@ async function writeSharePack(empSheetsOverride, sourceLabel, rosterIds) {
 }
 async function exportSharePack() { await writeSharePack(null, null, null); }
 
-/* 用汇总表里的「SWC人员名单」导出分享版 —— 不用选文件，
-   名单跟着数据包一起进来了（用户从 KPA 手动复制维护）。
+/* 用汇总表里的花名册导出分享版 —— 不用选文件，
+   名单跟着数据包一起进来了（从 KPA 手动复制维护）。
    删掉名单里的某一行 = 分享版不再包含这个人。
-   名单为空或没找到时，回落到按「一级部门英文简称 === SWC」自动裁剪。 */
+   名单为空或没找到时，回落到按「一级部门英文简称 === 本部门代号」自动裁剪。 */
 async function exportSharePackByRoster() {
   const ids = rosterIdsFromPack();
   if (!ids) {
-    showToast('没找到 SWC人员名单（或名单是空的），改用「一级部门英文简称」自动裁剪');
+    showToast('没找到花名册（或名单是空的），改用「一级部门英文简称」自动裁剪');
     await writeSharePack(null, null, null);
     return;
   }
-  await writeSharePack(null, 'SWC人员名单 ' + ids.size + ' 人', ids);
+  await writeSharePack(null, '花名册 ' + ids.size + ' 人', ids);
 }
 
 /* 用一份指定的 Excel 导出分享版（比花名册更临时：比如这次只想发某几个部门）
@@ -1054,12 +1055,12 @@ function refreshDataPanel() {
   const g = groupCounts(rawData.filter(d => d.status === '在职'));
   const roster = rosterIdsFromPack();
   const rows = [
-    ['数据包生成时间', P.built ? fmtBuilt(P.built) + '（' + (P.scope === 'swc' ? '仅 SWC' : '全量') + '）' : '未加载数据包'],
+    ['数据包生成时间', P.built ? fmtBuilt(P.built) + '（' + (P.scope === BU.scope ? '仅本部门' : '全量') + '）' : '未加载数据包'],
     ['当前人员', rawData.length + ' 条 · 在职 ' + g.formal + ' 正式 / ' + g.intern + ' 实习 / ' + g.outsource + ' 外协'],
     ['绩效', perfFileLoaded ? perfMeta.count + ' 人' : '未加载'],
     ['台账', ledgerData ? ledgerBoardCount() + ' 块' : '未加载'],
     ['手工数据源', dsData.loaded ? ('编制 ' + dsData.budget.length + ' · 目标 ' + Object.keys(dsData.targets).length + ' · 快照 ' + dsData.monthly.length + ' · 招聘 ' + dsData.recruitPlan.length) : '未加载'],
-    ['SWC人员名单', roster ? roster.size + ' 人（分享版按此名单裁）' : '未找到 / 空'],
+    ['花名册', roster ? roster.size + ' 人（分享版按此名单裁）' : '未找到 / 空'],
     ['来源文件', [P.files && P.files.emp, P.files && P.files.perf, P.files && P.files.ledger].filter(Boolean).join(' · ') || '—'],
   ];
   document.getElementById('dataPanelInfo').innerHTML = rows
@@ -1073,7 +1074,7 @@ function refreshDataPanel() {
   if (btn) btn.disabled = unsupported || (!_packedBooks.emp && !_packedBooks.perf && !_packedBooks.ledger);
   document.getElementById('dataPanelNote').textContent = unsupported
     ? '当前浏览器不支持「直接读写文件」能力，涉及写文件的功能不可用（用 Chrome 或 Edge 打开即可）。拖 Excel 进页面的方式不受影响。'
-    : '日常你只需要维护 data/SWC人力看板.xlsx 这一个 Excel（人员花名册基准是 data/ 的 KPA*.xls）：改完点最上面那条「从 data 文件夹读取最新数据」即可。'
+    : '日常你只需要维护 data/ 下那张汇总表（表名见 assets/bu-config.js 的 book；人员花名册基准是 data/ 的 KPA*.xls）：改完点最上面那条「从 data 文件夹读取最新数据」即可。'
       + '（也可以直接拖 Excel 进页面，或把当前数据保存成数据包让改动长期生效）';
 }
 
@@ -1090,12 +1091,8 @@ function refreshDataPanel() {
    读不到就静默返回 false，回落到「等待上传」界面 —— 双击打开（file://）时
    fetch 必然失败，但那时走的是数据包，正常情况下根本走不到这里。 */
 /* 注意：看板.html 就在项目根，数据文件在同级 data/ 下，相对路径直接写 data/ 即可。 */
-const DATA_FILES = (typeof window !== 'undefined' && window.HR_DATA_FILES) || {
-  cons:   'data/HR看板数据源.xlsx',
-  emp:    'data/KPA0635-001-20260910180137.xls',
-  perf:   'data/附件1-2026H1绩效考评结果汇总 - SWC.xlsx',
-  ledger: 'data/SWC最新人才现状-0909.xlsx',
-};
+const DATA_FILES = (typeof window !== 'undefined' && window.HR_DATA_FILES) ||
+  Object.assign({ cons: 'data/' + BU.book }, BU.files);
 async function fetchWorkbook(rel) {
   const resp = await fetch(rel + '?t=' + Date.now(), { cache: 'no-store' });
   if (!resp.ok) throw new Error('HTTP ' + resp.status);

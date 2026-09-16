@@ -360,9 +360,9 @@
     <button class="dp-btn dp-primary dp-need-fs" id="dpReadFolder" onclick="reloadFromDataFolder()"><span class="mi">folder_open</span><span><b>从 data 文件夹读取最新数据</b><i>读 data/HR看板数据源.xlsx · 改完 Excel 点一下就读到 · 只需授权一次</i></span></button>
     <button class="dp-btn" id="dsBtn" onclick="reloadDataSource()"><span class="mi">refresh</span><span><b>回到数据包</b><i>丢弃当前改动，读回 assets/hr-data.js</i></span></button>
     <button class="dp-btn dp-need-fs" id="dpSavePack" onclick="saveDataPack()"><span class="mi">save</span><span><b>把当前数据保存为数据包</b><i>写入 assets/hr-data.js，以后双击打开就是这份</i></span></button>
-    <div class="dp-group"><span class="mi">ios_share</span>分享给 SWC 管理人员</div>
-    <button class="dp-btn dp-need-fs" id="dpExportRoster" onclick="exportSharePackByRoster()"><span class="mi">badge</span><span><b>用花名册导出分享版</b><i>按汇总表里的「SWC花名册」裁 · 删掉名单里的某行 = 不发这个人</i></span></button>
-    <button class="dp-btn dp-need-fs" id="dpExportShare" onclick="exportSharePack()"><span class="mi">filter_alt</span><span><b>导出分享版数据（仅 SWC）</b><i>按「一级部门英文简称 = SWC」自动裁</i></span></button>
+    <div class="dp-group"><span class="mi">ios_share</span>分享给本部门管理人员</div>
+    <button class="dp-btn dp-need-fs" id="dpExportRoster" onclick="exportSharePackByRoster()"><span class="mi">badge</span><span><b>用花名册导出分享版</b><i>按汇总表里的花名册裁 · 删掉名单里的某行 = 不发这个人</i></span></button>
+    <button class="dp-btn dp-need-fs" id="dpExportShare" onclick="exportSharePack()"><span class="mi">filter_alt</span><span><b>导出分享版数据（仅本部门）</b><i>按「一级部门英文简称」自动裁</i></span></button>
     <button class="dp-btn dp-need-fs" onclick="exportSharePackWithFile()"><span class="mi">person_search</span><span><b>用指定名单导出分享版</b><i>临时选一份 Excel 来裁，不影响当前数据</i></span></button>
     <div class="dp-group"><span class="mi">build</span>其它</div>
     <button class="dp-btn dp-danger" onclick="clearSnapshot()"><span class="mi">delete_sweep</span><span><b>清空浏览器缓存</b><i>下次打开会重新从数据包加载</i></span></button>
@@ -370,6 +370,9 @@
   <div class="dp-note" id="dataPanelNote"></div>
 </div>
 
+<!-- 本部门配置：中性占位在前，本地真实值在后覆盖（local 那份不入库，缺失时自动回落到占位） -->
+<script src="assets/bu-config.js"></script>
+<script src="assets/bu-config.local.js"></script>
 <script src="assets/hr-data.js"></script>
 <script src="assets/js/core.js"></script>
 <script src="assets/js/ledger.js"></script>

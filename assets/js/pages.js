@@ -540,12 +540,12 @@ function renderLedger() {
   const el = document.getElementById('ledgerContent');
   if (!el) return;
   if (!ledgerData) {
-    el.innerHTML = `<div class="ledger-hint">尚未加载台账文件<br><span style="font-size:11.5px">把「SWC最新人才现状-*.xlsx」拖入窗口，或点击右上角「上传台账」——它将自动识别 9 个 sheet</span><br><br><button class="tb-btn primary" onclick="uploadLedgerData()">选择台账文件</button></div>`;
+    el.innerHTML = `<div class="ledger-hint">尚未加载台账文件<br><span style="font-size:11.5px">把汇总表（含台账 sheet）拖入窗口，或点击右上角「上传台账」——它将自动识别各业务 sheet</span><br><br><button class="tb-btn primary" onclick="uploadLedgerData()">选择台账文件</button></div>`;
     return;
   }
   const L = ledgerData;
   const act = rawData.filter(d => d.status === '在职');
-  const kpaOut = act.filter(d => d.group === 'outsource' && (d.center === 'SWC' || !d.center)).length;
+  const kpaOut = act.filter(d => d.group === 'outsource' && (d.center === BU.code || !d.center)).length;
   let html = '';
 
   /* ① 抬头：公司口径总账 */
@@ -553,7 +553,7 @@ function renderLedger() {
     const s = L.summary;
     const lvTxt = s.levelDist.map(x => `${x.level} ${x.count}`).join(' · ');
     html += `<div class="ledger-hero">
-      <h2>SWC 中心 · 人才现状总账 <span class="scope-note scope-all" style="font-size:10px">台账口径</span></h2>
+      <h2>本部门 · 人才现状总账 <span class="scope-note scope-all" style="font-size:10px">台账口径</span></h2>
       <p>${esc((s.notes || []).slice(0, 3).join('　|　'))}</p>
       <div class="brief-seg" style="margin:12px 0 0">
         <div class="bs-item"><div class="bs-label">在职总人数（正式）</div><div class="bs-val">${s.headcount != null ? s.headcount : '—'}</div><div class="bs-note">含试用期 ${s.probation != null ? s.probation : '—'} 人</div></div>
@@ -564,7 +564,7 @@ function renderLedger() {
       ${lvTxt ? `<div class="ri-meta" style="margin-top:10px">职等分布：${esc(lvTxt)}</div>` : ''}
     </div>`;
   } else {
-    html += `<div class="ledger-hint">台账已加载，但未识别到「SWC中心组织架构」汇总表</div>`;
+    html += `<div class="ledger-hint">台账已加载，但未识别到「组织架构」汇总表</div>`;
   }
 
   html += '<div class="ledger-grid">';

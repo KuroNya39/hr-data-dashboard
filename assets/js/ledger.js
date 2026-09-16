@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════
-   v8 ledger.js — HR 工作台账解析（SWC最新人才现状-*.xlsx）
+   v8 ledger.js — HR 工作台账解析（汇总表里的台账 sheet）
    9 个 sheet → 6 个业务板块
    该工作簿含声明假范围（如「招聘未达成需求」声明 1048536 行 × 16374 列），
       所有读取一律走 sheetRowsSafe() 先裁剪 !ref，否则 SheetJS 会 OOM。
@@ -59,7 +59,7 @@ function parseLedgerWorkbook(wb) {
   return out;
 }
 
-/* ── ① SWC中心组织架构（汇总说明 + 职等分布）── */
+/* ── ① 本部门组织架构（汇总说明 + 职等分布）── */
 function parseLedgerSummary(rows, prev) {
   const s = prev || { headcount:null, probation:null, intern:null, internPaid:null, outsource:null,
     demand:null, done:null, pending:null, pendingOutsource:null, levelDist:[], notes:[] };

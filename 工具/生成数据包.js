@@ -12,28 +12,31 @@
 
    用法：
      node 工具/生成数据包.js              → 全量（完整版）
-     node 工具/生成数据包.js --swc        → 仅 SWC（分享版）
-     node 工具/生成数据包.js --swc --out <文件>
+     node 工具/生成数据包.js --share      → 仅本部门（分享版）
+     node 工具/生成数据包.js --share --out <文件>
+
+   本部门代号 / 表名 / 文件名都从 assets/bu-config.js 读（真实值在 bu-config.local.js）。
 
    数据来源（2026-09-12 起）：
-     data/HR看板数据源.xlsx —— 一个文件装全部。按 sheet 名拆成四路：
-       人员数据 / 绩效-* / 台账-* / 部门编制·指标目标·月度快照·招聘计划·SWC花名册
+     data/ 下那张汇总表 —— 一个文件装全部。按 sheet 名拆成四路：
+       人员数据 / 绩效-* / 台账-* / 部门编制·指标目标·月度快照·招聘计划·花名册
      **人员例外**：优先取 data/ 里的 KPA*.xls 原文件（HTML 要看新鲜的原表），
      汇总表里的「人员数据」只是给 Excel 版看板用的副本，找不到原文件时才回落到它。
      找不到汇总表时自动回落到旧的分散文件，行为与改造前一致。
    ═══════════════════════════════════════════════════════════════ */
 const fs = require('fs');
 const path = require('path');
+const BU = require('./读取部门配置.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA = path.join(ROOT, 'data');
 const ARGS = process.argv.slice(2);
-const SWC_ONLY = ARGS.includes('--swc');
+const SHARE_ONLY = ARGS.includes('--share');
 const OUT_ARG = ARGS.indexOf('--out');
 const OUT = OUT_ARG >= 0 ? path.resolve(ARGS[OUT_ARG + 1])
-  : (SWC_ONLY ? path.join(ROOT, '分享版', 'assets', 'hr-data.js')
-              : path.join(ROOT, 'assets', 'hr-data.js'));
-const TARGET = 'SWC';
+  : (SHARE_ONLY ? path.join(ROOT, '分享版', 'assets', 'hr-data.js')
+                : path.join(ROOT, 'assets', 'hr-data.js'));
+const TARGET = BU.code;
 const LOG = [];
 const say = s => { LOG.push(s); console.log(s); };
 
@@ -84,8 +87,8 @@ function bookOf(wb) {
 function readBook(file) { return XLSX.readFile(file, { cellDates: false }); }
 
 /* ── 人员裁剪 ──
-   ids 非空 = 按「SWC花名册」的工号白名单裁（她手动维护发谁不发谁）；
-   ids 为空 = 按「一级部门英文简称 === SWC」裁。 */
+   ids 非空 = 按花名册的工号白名单裁（手动维护发谁不发谁）；
+   ids 为空 = 按「一级部门英文简称 === 本部门代号」裁。 */
 function trimEmpSheets(sheets, ids) {
   let keptN = 0, dropN = 0;
   const otherCenters = new Set();
@@ -121,10 +124,10 @@ function trimEmpSheets(sheets, ids) {
   return { sheets: out.map(x => [x[0], x[1]]), missing: out.length ? out[0][2] : [], keptN, dropN, otherCenters };
 }
 
-/* 从「SWC人员名单」sheet 里取工号白名单（旧名 SWC花名册 也认） */
+/* 从花名册 sheet 里取工号白名单（名字见 bu-config.js 的 rosterSheet，含「花名册」的也认） */
 function rosterIdsOf(manualSheets) {
   if (!manualSheets) return null;
-  const hit = manualSheets.find(([n]) => /^SWC人员名单/.test(n) || /花名册/.test(n));
+  const hit = manualSheets.find(([n]) => BU.rosterSheet.test(n) || /花名册/.test(n));
   if (!hit) return null;
   const aoa = hit[1] || [];
   if (aoa.length < 2) return null;
@@ -142,8 +145,8 @@ function rosterIdsOf(manualSheets) {
   return ids.size ? ids : null;
 }
 
-/* ── 绩效裁剪：按「中心」列过滤，没有该列就按 SWC 工号白名单 ── */
-function trimPerfSheets(sheets, swcIds) {
+/* ── 绩效裁剪：按「中心」列过滤，没有该列就按本部门工号白名单 ── */
+function trimPerfSheets(sheets, targetIds) {
   let keptN = 0;
   const out = sheets.map(([name, aoa]) => {
     let h = -1, iId = -1, iCenter = -1;
@@ -160,7 +163,7 @@ function trimPerfSheets(sheets, swcIds) {
         if (c) return c === TARGET;
       }
       const id = String(r[iId] == null ? '' : r[iId]).trim();
-      return id ? swcIds.has(id) : false;
+      return id ? targetIds.has(id) : false;
     });
     keptN += body.length;
     /* 表头之后那些「工号列为空」的说明行也留着 */
@@ -173,18 +176,19 @@ function trimPerfSheets(sheets, swcIds) {
 }
 
 /* ═══ 主流程 ═══ */
-say(SWC_ONLY ? '【分享版数据包 · 仅 SWC】' : '【完整版数据包 · 全量】');
+say(SHARE_ONLY ? '【分享版数据包 · 仅本部门】' : '【完整版数据包 · 全量】');
 
-/* 汇总表里各 sheet 的归属判定（2026-09-12 晚起 = SWC人力看板.xlsx，用户手工维护）。
-   浏览器端 data.js 用同一套谓词 —— 
+/* 汇总表里各 sheet 的归属判定（表名见 bu-config.js 的 book，用户手工维护）。
+   浏览器端 data.js 用同一套谓词 ——
    两边必须一致，否则「生成数据包」和「从 data 文件夹读取」会读出不同的东西。
-   ⚠ roster 必须锚定 ^SWC人员名单：本年度入职名单 / 高潜名单 / C型干部名单 都含「名单」，
+   ⚠ roster 的花名册名必须锚定 sheet 名开头（见 bu-config.js 的 rosterSheet）：
+     本年度入职名单 / 高潜名单 / C型干部名单 都含「名单」，
      宽松匹配会把它们误当分享白名单。
    ⚠ ledger 谓词要排除 绩效考评明细（那两张是绩效表），但要放行 绩效B-C人员情况（台账）。 */
 const SHEET = {
   emp:    sn => /^人员数据/.test(sn),
   perf:   sn => /绩效考评明细/.test(sn),
-  roster: sn => /^SWC人员名单/.test(sn) || /花名册/.test(sn),
+  roster: sn => BU.rosterSheet.test(sn) || /花名册/.test(sn),
   manual: sn => /^(部门编制|指标目标|月度快照|招聘计划|工作分工)$/.test(sn),
   ledger: sn => !/绩效考评明细/.test(sn) && /组织架构|人员情况|校招需求|外包名单|外包评价|入职名单|招聘未达成|储备干部|高潜|部门梯队|C型干部|校招名单/.test(sn),
 };
@@ -204,16 +208,16 @@ function empRowCount(sheets) {
 
 const files = {};
 const books = {};
-const CONS = path.join(DATA, 'SWC人力看板.xlsx');
+const CONS = path.join(DATA, BU.book);
 
 if (fs.existsSync(CONS)) {
-  say('① 原数据表：SWC人力看板.xlsx');
+  say('① 原数据表：' + BU.book);
   const wb = readBook(CONS);
   books.perf = splitOf(wb, SHEET.perf);
   books.ledger = splitOf(wb, SHEET.ledger);
   const manNames = wb.SheetNames.filter(sn => SHEET.manual(sn) || SHEET.roster(sn));
   books.manual = manNames.length ? manNames.map(n => [n, aoaOfSheet(wb.Sheets[n])]) : null;
-  files.manual = 'SWC人力看板.xlsx';
+  files.manual = BU.book;
   say('   绩效 ' + (books.perf ? books.perf.map(p => p[0]).join('/') : '无')
     + ' · 台账 ' + (books.ledger ? books.ledger.length + ' 张' : '无')
     + ' · 手工 ' + (books.manual ? books.manual.length + ' 张' : '无'));
@@ -239,7 +243,7 @@ if (fs.existsSync(CONS)) {
     say('② 人员：汇总表里的「人员数据」sheet（没找到 data/KPA*.xls）');
   } else say('② 人员：✗ 没有可用的人员数据');
 } else {
-  say('① 原数据表：找不到 data/SWC人力看板.xlsx，回落到分散的原文件');
+  say('① 原数据表：找不到 data/' + BU.book + '，回落到分散的原文件');
   say('   （建议先跑一次  node 工具/建汇总表.js ）');
 
   const empFile = findFile(/^KPA.*\.xls$/i);
@@ -273,9 +277,9 @@ if (fs.existsSync(CONS)) {
 /* 裁剪 */
 let otherCenters = new Set();
 let usedRoster = null;
-if (SWC_ONLY) {
+if (SHARE_ONLY) {
   const rosIds = rosterIdsOf(books.manual);
-  say('⑤ 裁剪为仅 SWC' + (rosIds ? '（按 SWC人员名单，' + rosIds.size + ' 个工号）' : '（按一级部门英文简称列）'));
+  say('⑤ 裁剪为仅本部门' + (rosIds ? '（按花名册，' + rosIds.size + ' 个工号）' : '（按一级部门英文简称列）'));
   usedRoster = rosIds;
   const r = trimEmpSheets(books.emp, rosIds);
   books.emp = r.sheets;
@@ -284,7 +288,7 @@ if (SWC_ONLY) {
     + (rosIds ? '' : ' · 剔除中心 ' + r.otherCenters.size + ' 个'));
   if (!rosIds && otherCenters.size) say('   剔除的中心：' + [...otherCenters].sort().join(' '));
   if (rosIds && r.missing.length) {
-    say('   ⚠ SWC人员名单里有 ' + r.missing.length + ' 个工号在人员数据里找不到（可能已离职或被移出导出）：');
+    say('   ⚠ 花名册里有 ' + r.missing.length + ' 个工号在人员数据里找不到（可能已离职或被移出导出）：');
     say('     ' + r.missing.slice(0, 20).join(' ') + (r.missing.length > 20 ? ' …' : ''));
   }
   if (books.perf) {
@@ -305,7 +309,7 @@ if (SWC_ONLY) {
 
 const pack = {
   v: 1,
-  scope: SWC_ONLY ? 'swc' : 'full',
+  scope: SHARE_ONLY ? BU.scope : 'full',
   built: new Date().toISOString(),
   files,
   books,
@@ -319,10 +323,10 @@ const kb = (fs.statSync(OUT).size / 1024).toFixed(0);
 say('\n✔ 已写出 ' + path.relative(ROOT, OUT) + '（' + kb + ' KB）');
 
 /* ── 分享版安全自检 ──
-   判据只有一个：决定中心归属的那一列（一级部门英文简称）的值必须是 SWC。
+   判据只有一个：决定中心归属的那一列（一级部门英文简称）的值必须是本部门代号。
    不要对整个 JSON 做全文正则 —— 别的字段里会出现与中心简称同名的值、
    成本中心描述里也可能包含其他中心的字样，全文扫会大量误报，把真问题淹掉。 */
-if (SWC_ONLY) {
+if (SHARE_ONLY) {
   say('\n══ 安全自检 ══');
   let leak = 0, checked = 0;
   books.emp.forEach(([name, aoa]) => {
@@ -345,6 +349,6 @@ if (SWC_ONLY) {
     });
   });
   say('   人员数据复核：共 ' + checked + ' 行 · 越界行 ' + leak + ' 行'
-    + (usedRoster ? '（判据：工号是否在 SWC人员名单内）' : '（判据：一级部门英文简称是否为 SWC）'));
+    + (usedRoster ? '（判据：工号是否在花名册内）' : '（判据：一级部门英文简称是否为本部门）'));
   say(leak === 0 ? '   ✔ 通过：分享版人员数据完全落在允许范围内' : '   ✗ 发现 ' + leak + ' 处问题');
 }

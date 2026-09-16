@@ -471,7 +471,7 @@ input, select, textarea { font-family:inherit; }
 .dp-row.stacked { display:block; }
 .dp-row.stacked b { display:block; text-align:left; max-width:100%; margin-top:1px; font-weight:500; font-size:11.5px; color:var(--ink-2); word-break:break-all; line-height:1.7; }
 .dp-actions { display:flex; flex-direction:column; gap:8px; }
-/* 分组小标题：把「更新数据 / 分享给 SWC / 其它」分开，
+/* 分组小标题：把「更新数据 / 分享给本部门 / 其它」分开，
    按钮多了以后不带标题会分不清哪些是日常动作、哪些是一次性的 */
 .dp-group {
   display:flex; align-items:center; gap:6px;

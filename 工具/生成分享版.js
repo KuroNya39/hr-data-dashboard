@@ -1,15 +1,18 @@
 /* ═══════════════════════════════════════════════════════════════
-   生成 SWC 分享版（独立文件夹，双击即看、离线可用、零依赖）
+   生成本部门分享版（独立文件夹，双击即看、离线可用、零依赖）
    ------------------------------------------------------------------
    产出 分享版/：
      ├── 看板.html            对方双击这个就能看
      └── assets/
          ├── css/ js/ vendor/   完整版代码副本
-         └── hr-data.js         裁剪后的数据包（只含 SWC）
+         ├── bu-config.js       本部门配置（中性占位 + 本地真实值，要一起带走）
+         └── hr-data.js         裁剪后的数据包（只含本部门）
 
    核心原则：不是「界面隐藏」，而是「文件里根本没有」。
-     数据包里只保留 一级部门英文简称 === 'SWC' 的行，
+     数据包里只保留 一级部门英文简称 === 本部门代号 的行，
      其他中心以及空中心记录一律不写出。
+
+   本部门代号 / 表名 / 文件名都从 assets/bu-config.js 读（真实值在 bu-config.local.js）。
 
    用法：node 工具/生成分享版.js
    ═══════════════════════════════════════════════════════════════ */
@@ -17,11 +20,12 @@ const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
 const cp = require('child_process');
+const BU = require('./读取部门配置.js');
 
 const ROOT = path.resolve(__dirname, '..');
 const DATA = path.join(ROOT, 'data');
 const OUT = path.join(ROOT, '分享版');
-const TARGET = 'SWC';
+const TARGET = BU.code;
 const LOG = [];
 const say = s => { LOG.push(s); console.log(s); };
 
@@ -81,7 +85,7 @@ function pruneExtras(from, to) {
   return removed;
 }
 
-say('══ 生成 SWC 分享版 ══\n');
+say('══ 生成本部门分享版 ══\n');
 say('① 清理旧产物');
 for (const p of ['data', 'index.html', '打开分享版.bat', 'assets/hr-data.js']) {
   const full = path.join(OUT, p);
@@ -90,7 +94,7 @@ for (const p of ['data', 'index.html', '打开分享版.bat', 'assets/hr-data.js
 
 say('\n② 裁剪数据 → 分享版/assets/hr-data.js');
 try {
-  const r = cp.execFileSync(process.execPath, [path.join(__dirname, '生成数据包.js'), '--swc'], { encoding: 'utf8' });
+  const r = cp.execFileSync(process.execPath, [path.join(__dirname, '生成数据包.js'), '--share'], { encoding: 'utf8' });
   r.split('\n').filter(Boolean).forEach(l => say('   ' + l));
 } catch (e) {
   say('   ✗ 数据包生成失败：' + (e.stdout || e.message));
@@ -107,6 +111,17 @@ for (const d of ['css', 'js', 'vendor']) {
   copied += n;
   say('   · ' + d + '/ → ' + n + ' 个文件' + (stale ? '（清理旧文件 ' + stale + ' 个）' : ''));
 }
+/* 本部门配置必须跟着走：分享版的 看板.html 也要靠它取部门代号。
+   local 那份含真实值，缺了分享版会退回中性占位 —— 仍是能看的，只是代号/表名对不上。 */
+let cfgCopied = [];
+for (const f of ['bu-config.js', 'bu-config.local.js']) {
+  const from = path.join(ROOT, 'assets', f);
+  if (!fs.existsSync(from)) { say('   · ⚠ 缺 assets/' + f + '，分享版将回落到中性占位'); continue; }
+  fs.mkdirSync(path.join(OUT, 'assets'), { recursive: true });
+  fs.copyFileSync(from, path.join(OUT, 'assets', f));
+  cfgCopied.push(f);
+}
+say('   · 本部门配置 → ' + (cfgCopied.length ? cfgCopied.join(' + ') : '无'));
 say('   合计 ' + copied + ' 个文件（注意：不带 assets/hr-data.js，那是完整版的数据包）');
 
 say('\n④ 生成分享版入口 → 分享版/看板.html');
@@ -115,19 +130,19 @@ let html = srcHtml;
 const snapBefore = () => html;
 
 /* (a) 标题 */
-html = html.replace(/<title>.*?<\/title>/, '<title>HR 数据看板 · SWC 分享版</title>');
+html = html.replace(/<title>.*?<\/title>/, '<title>HR 数据看板 · ' + BU.label + ' 分享版</title>');
 /* (b) 副标题 */
-html = html.replace(/(<div class="brand-sub"[^>]*>)[^<]*(<\/div>)/, '$1SWC 分享版 · HRBP 工作台$2');
+html = html.replace(/(<div class="brand-sub"[^>]*>)[^<]*(<\/div>)/, '$1' + BU.label + ' 分享版 · HRBP 工作台$2');
 /* (c) 移除中心筛选器（连 label 一起，避免留下孤立标签） */
 html = html.replace(/<label[^>]*>中心<\/label><select id="filterCenter"[^>]*><\/select>/,
-  '<!-- 分享版：中心筛选器已移除（数据仅含 SWC） -->');
+  '<!-- 分享版：中心筛选器已移除（数据仅含本部门） -->');
 if (!/分享版：中心筛选器已移除/.test(html)) { say('   ✗ 中心筛选器未匹配到，请检查 HTML 结构'); process.exit(1); }
 /* (d) 顶部横幅 */
 const banner = `
         <div class="share-banner" id="shareBanner">
           <span class="mi">shield_lock</span>
           <div>
-            <b>本看板仅包含 SWC 中心数据</b>
+            <b>本看板仅包含本部门数据</b>
             <span>不含其他中心人员信息 · 数据为生成时快照，如需最新请向 HRBP 索取</span>
           </div>
         </div>`;
@@ -163,11 +178,11 @@ const patch = `
       } catch (e) {}
     };
   }
-  /* 数据只有 SWC，但筛选器逻辑需要这个元素存在（保持 display:none，不构成越权） */
+  /* 数据只有本部门，但筛选器逻辑需要这个元素存在（保持 display:none，不构成越权） */
   if (!document.getElementById('filterCenter')) {
     const s = document.createElement('select');
-    s.id = 'filterCenter'; s.value = 'SWC'; s.style.display = 'none';
-    const o = document.createElement('option'); o.value = 'SWC'; o.textContent = 'SWC';
+    s.id = 'filterCenter'; s.value = '${BU.code}'; s.style.display = 'none';
+    const o = document.createElement('option'); o.value = '${BU.code}'; o.textContent = '${BU.code}';
     s.appendChild(o); document.body.appendChild(s);
   }
 })();
@@ -181,15 +196,15 @@ say('\n⑤ 安全自检');
 let leak = 0;
 
 /* 5.1 数据包里的人员必须在允许范围内。
-   判据二选一：有「SWC花名册」时按工号白名单（她手动维护的名单说了算，
-   名单里可能有非 SWC 的人 —— 那是她的选择），没有花名册时按中心列 = SWC。 */
+   判据二选一：有花名册时按工号白名单（维护者手动维护的名单说了算，
+   名单里可能有非本部门的人 —— 那是维护者的选择），没有花名册时按中心列 = 本部门代号。 */
 const packPath = path.join(OUT, 'assets', 'hr-data.js');
 const sandbox = { window: {} };
 vm.createContext(sandbox);
 vm.runInContext(fs.readFileSync(packPath, 'utf8'), sandbox);
 const pack = sandbox.window.HR_DATA;
 const rosterIds = (function () {
-  const hit = (pack.books.manual || []).find(([n]) => /^SWC人员名单/.test(n) || /花名册/.test(n));
+  const hit = (pack.books.manual || []).find(([n]) => BU.rosterSheet.test(n) || /花名册/.test(n));
   if (!hit) return null;
   const aoa = hit[1] || [];
   if (aoa.length < 2) return null;
@@ -228,10 +243,10 @@ const centersInPack = new Set();
   });
 });
 say('   数据包人员行 ' + empRows + ' · 越界行 ' + badRows
-  + ' · 判据 ' + (rosterIds ? 'SWC人员名单（' + rosterIds.size + ' 人）' : '一级部门英文简称 = SWC')
+  + ' · 判据 ' + (rosterIds ? '花名册（' + rosterIds.size + ' 人）' : '一级部门英文简称 = 本部门')
   + ' · 出现的中心 ' + JSON.stringify([...centersInPack]));
 if (badRows) leak++;
-if (!rosterIds && (centersInPack.size !== 1 || !centersInPack.has(TARGET))) { say('   ✗ 数据包里出现了非 SWC 的中心'); leak++; }
+if (!rosterIds && (centersInPack.size !== 1 || !centersInPack.has(TARGET))) { say('   ✗ 数据包里出现了非本部门的中心'); leak++; }
 
 /* 5.2 分享版目录里不能混入完整版数据包或 KPA 原件 */
 const stray = [];

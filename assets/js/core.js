@@ -7,7 +7,7 @@ let rawData = [];
 let perfData = {};
 let perfFileLoaded = false;
 let perfMeta = { count: 0, centers: [] };   // 绩效覆盖元信息
-let ledgerData = null;                       // 台账数据（SWC最新人才现状）
+let ledgerData = null;                       // 台账数据（从汇总表里的台账 sheet 解析而来）
 let ledgerSavedAt = null;
 let chartInstances = {};
 let dataSavedAt = null;
@@ -234,9 +234,10 @@ function parseRow(row) {
   // 婚否归一
   const mar = String(r.maritalStatus || '').trim();
   r.maritalStatus = (mar === '是' || mar === '已婚') ? '已婚' : (mar === '否' || mar === '未婚') ? '未婚' : (mar || null);
-  // 中心兜底
-  r.center = r.center || (r.centerName && r.centerName.includes('系统软件') ? 'SWC' :
-    r.centerName && r.centerName.includes('市场产品') ? 'MPC' : '');
+  // 中心兜底：组织名关键字 → 中心代号，映射表在 bu-config.js（留空则不做这层兜底）
+  const _bu = (typeof window !== 'undefined' && window.BU) || {};
+  const _hit = (_bu.orgMap || []).find(m => r.centerName && r.centerName.includes(m[0]));
+  r.center = r.center || (_hit ? _hit[1] : '');
   // v8：人群分组 + 合同类型兜底
   r.group = staffGroupOf(r);
   if (!r.contractType) r.contractType = inferContractType(r.empType);

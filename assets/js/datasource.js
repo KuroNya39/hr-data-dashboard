@@ -28,11 +28,12 @@ let dsData = {
 let dsDataVersion = 0;    // 版本号，供 refreshAll 判断是否需要重绘
 
 /* 数据路径：看板.html 在项目根，原数据表在同级 data/ 下。
-   2026-09-12 晚起 = SWC人力看板.xlsx（用户手工维护的 13 张 sheet）。
+   2026-09-12 晚起 = data/ 下那份手工维护的汇总表（表名见 bu-config.js 的 book）。
    旧的「手工四张表」（部门编制/指标目标/月度快照/招聘计划）已按用户要求移除，
    对应指标静默降级显示「—」。
    分享版走内联数据包，不经过这里。 */
-const DS_PATH = (typeof window !== 'undefined' && window.HR_DATA_SOURCE) || 'data/SWC人力看板.xlsx';
+const DS_PATH = (typeof window !== 'undefined' && window.HR_DATA_SOURCE) ||
+  ('data/' + (((typeof window !== 'undefined' && window.BU) || {}).book || '人力看板.xlsx'));
 
 /* ── 小工具：按表头名建立「列名 → 索引」映射 ── */
 function dsColIndex(headerRow) {
