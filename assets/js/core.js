@@ -58,12 +58,13 @@ function formalOnly(arr) { return arr.filter(d => staffGroupOf(d) === 'formal');
 function scopeTag(scope, labelOverride) {
   const m = SCOPE_META[scope] || SCOPE_META.all;
   const lab = labelOverride || m.label;
-  return `<span class="scope-tag ${m.cls}" title="${esc(m.title)}">${esc(lab)}</span>`;
+  return `<span class="scope-tag ${m.cls}" aria-label="${esc(m.title)}">${esc(lab)}</span>`;
 }
-/* 口径徽标：图表标题旁（chart-note 内联） */
-function scopeNote(scope, text) {
+/* 口径徽标：图表标题旁（chart-note 内联）。labelOverride 给「单人群档位」用：
+   SCOPE_META.intern 的「正式+实习」是筛选器语义（含实习），单独看实习生时要显式写「实习」 */
+function scopeNote(scope, text, labelOverride) {
   const m = SCOPE_META[scope] || SCOPE_META.all;
-  return `${esc(text || '')}<span class="scope-note ${m.cls}" title="${esc(m.title)}">${m.label}</span>`;
+  return `${esc(text || '')}<span class="scope-note ${m.cls}" aria-label="${esc(m.title)}">${labelOverride || m.label}</span>`;
 }
 
 /* ── 字段映射 v8（KPA 156 列 + 别名；重复列组由 mergeDups 兜底） ── */
@@ -191,6 +192,18 @@ function parseExcelDate(val) {
   return s;
 }
 function toDate(v){ if(!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
+
+/* ── 试用期届满日估算（唯一实现，pages/alerts 全走这里）──
+   口径（用户拍板 2026-10-12）：试用期 3-6 个月，一律按 6 个日历月算。
+   有「试用届满日期」原字段用原值；缺的按 入职日期+6个月 */
+function estProbEndOf(d) {
+  let p = toDate(d.probationEnd);
+  if (!p) {
+    const j = toDate(d.joinDate);
+    if (j) { p = new Date(j); p.setMonth(p.getMonth() + 6); }
+  }
+  return p;
+}
 function calcTenure(jd) { const d = toDate(jd); if (!d) return 0; return (Date.now()-d.getTime())/(365.25*86400000); }
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
 
@@ -373,7 +386,7 @@ function getMonthsList(n) {
   return months;
 }
 /* dateKey 可以是字段名，也可以是「给一行、返回日期」的函数
-   ——「试用届满」一半的人原字段为空，得按 入职+183天 估算，估出来的值没有字段名可用 */
+   ——「试用届满」九成人原字段为空，得估算，估出来的值没有字段名可用 */
 function countByMonth(data, dateKey, months) {
   const m = {}; months.forEach(k => m[k] = 0);
   const get = typeof dateKey === 'function' ? dateKey : (d => d[dateKey]);
@@ -390,10 +403,25 @@ function headcountAt(data, endMs) {
     return true;
   }).length;
 }
-function kpi(label, value, sub, colorVar, scope) {
-  const dot = colorVar ? `<span class="kpi-dot" style="background:var(${colorVar})"></span>` : '';
-  const tag = scope ? scopeTag(scope) : '';
+function kpi(label, value, sub, colorVar, scope, scopeLabel) {
+  const dot = colorVar ? `<span class="kpi-dot" style="--tone:var(${colorVar})"></span>` : '';
+  const tag = scope ? scopeTag(scope, scopeLabel) : '';
   return `<div class="kpi-card"><div class="kpi-label">${dot}${label}${tag}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub||''}</div></div>`;
+}
+/* CSV 文本：BOM + 表头 + 数据行。**每格一律加引号**——值里带逗号 / 引号 / 换行都不会串列，
+   换行用 CRLF（Excel 最认这个）；单元格内的换行压成空格，免得一行数据在 Excel 里占多行。
+   员工明细 / 校招需求 / 校招跟踪三处导出共用，调用方只管把每行整理成「值数组」。 */
+function csvText(header, rows) {
+  const q = v => '"' + String(v == null ? '' : v).replace(/\r?\n/g, ' ').replace(/"/g, '""') + '"';
+  return '\ufeff' + [header, ...rows].map(r => r.map(q).join(',')).join('\r\n');
+}
+/* CSV 下载（员工明细 / 校招需求 / 校招跟踪共用）：BOM + 日期戳 + 用完即撤的 objectURL */
+function downloadCsv(baseName, text) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([text], { type: 'text/csv;charset=utf-8;' }));
+  a.download = `${baseName}_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
 }
 /* 引号也要转义：多处把值拼进 value="…" / title="…"，只转 < > & 的话
    姓名或部门里带一个 " 就能把属性截断（部门名里带引号是常见写法） */
@@ -401,10 +429,15 @@ function esc(v) {
   return v == null ? '' : String(v)
     .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+/* 评价等级 → 档位后缀。绩效（SA/A/B+/B/B-/C/D）与校招（S/A/B+/B/B-）是**同一条梯**，
+   S 与 SA 同为梯顶 —— 所以只此一处映射，别处不再各写一份表。
+   后缀直接就是 CSS 里的档位名（.tag-grade-<后缀> / .pill-grade-<后缀>），
+   配色只在 style.css 出现一次，JS 不挑色。认不出的等级返回 ''，调用方回落中性样式。 */
+const GRADE_RUNG = {'SA':'sa','S':'sa','A':'a','B+':'bp','B':'b','B-':'bm','C':'c','D':'d'};
+function gradeRung(grade) { return GRADE_RUNG[cleanGrade(grade)] || ''; }
 function gradeTag(grade) {
-  const g = cleanGrade(grade);
-  const map = {'SA':'tag-grade-sa','S':'tag-grade-sa','A':'tag-grade-a','B+':'tag-grade-bp','B':'tag-grade-b','B-':'tag-grade-bm','C':'tag-grade-c','D':'tag-grade-d'};
-  return `<span class="tag ${map[g]||''}">${esc(grade)||'—'}</span>`;
+  const r = gradeRung(grade);
+  return `<span class="tag ${r ? 'tag-grade-' + r : ''}">${esc(grade)||'—'}</span>`;
 }
 
 /* ── 主题（localStorage 持久化）── */
@@ -425,10 +458,20 @@ function toggleTheme() {
      这里再调一次 refreshAll()，一次切主题会把整块看板从头刷两遍 */
 }
 function getCSS(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+/* 把 CSS 里的时长令牌读成毫秒数（'260ms' → 260）。
+   图表动效时长不在 JS 里另写一份：令牌改了图表跟着改，两边不会漂。 */
+function cssMs(name, fallback) {
+  const n = parseFloat(getCSS(name));
+  return isFinite(n) ? n : fallback;
+}
+/* 系统开了「减少动态效果」→ 图表不做入场动画（降级而不是换一种动画，见 style.css 动效层） */
+function reduceMotion() {
+  return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
 function themeColors() {
   const tc = {};
   ['--ink','--ink-2','--ink-3','--gridline','--surface','--surface-2','--border','--accent','--accent-strong','--accent-soft',
-   '--s1','--s2','--s3','--s4','--s5','--s6','--s7','--s8',
+   '--s1','--s2','--s3','--s4','--s5','--s6',
    '--type-permanent','--type-probation','--type-intern-paid','--type-intern-unpaid','--type-outsource','--type-labor',
    '--grade-sa','--grade-a','--grade-bp','--grade-b','--grade-bm','--grade-c','--grade-d',
    '--expire-30','--expire-60','--expire-90',
@@ -440,14 +483,118 @@ function themeColors() {
 
 /* ── Chart.js 封装 ── */
 let CHART_DEFAULTS = null;
+/* 柱顶/柱尾数值标签（2026-10-12 用户要求）：单数据集且 ≤24 根柱自动开启，
+   多数据集（堆叠）默认关 —— 分段上写字太吵，tooltip 够用。
+   调用方经 opts.plugins.barValue = { display, format } 显式覆盖（makeChart 负责提取）。
+   ⚠ 配置必须存模块级 Map 而不是 options.plugins.barValue —— Chart.js 对
+   注册插件的 options 做可脚本化解析，函数值会被它当 scriptable 拿上下文调用
+   （v.toFixed is not a function 的根因，间歇性触发：重排版才走到解析）。
+   横条时数值画在条尾：放不下（右侧超 85% 宽）就画条内白字。 */
+const BAR_VALUE_CFG = new Map();   // chart.id → { display, format }
+/* 条内文字的两个候选墨色 + 条底亮度判据。
+   ⚠️ 不能用「白字」写死：深色模式下条底是提亮过的浅色（--s1 是 #60a5fa），
+      白字落在上面读不清。--surface / --ink 这两支正好随主题翻转，
+      所以「条底亮 → 取 --surface，条底暗 → 取 --ink」在两个主题下都成立。
+   这两个值按主题缓存：afterDatasetsDraw 每帧都跑，getComputedStyle 不能每帧读。 */
+let _barInk = null, _barInkTheme = null;
+function barInks() {
+  const th = document.documentElement.getAttribute('data-theme') || 'light';
+  if (_barInkTheme !== th || !_barInk) {
+    _barInk = {
+      onLightBar: (typeof getCSS === 'function' && getCSS('--ink')) || '#0d1b2a',
+      onDarkBar:  (typeof getCSS === 'function' && getCSS('--surface')) || '#ffffff',
+    };
+    _barInkTheme = th;
+  }
+  return _barInk;
+}
+/* 相对亮度（sRGB 近似）：只用来在「深墨 / 浅墨」里二选一，不做 WCAG 精确计算。
+   认不出来的颜色（渐变对象等）返回 1 → 当深底，走旧行为（白字）。 */
+function fillLuma(c) {
+  if (typeof c !== 'string') return 1;
+  const h = c.trim();
+  const hex = h.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  let r, g, b;
+  if (hex) {
+    const s = hex[1].length === 3 ? hex[1].replace(/./g, ch => ch + ch) : hex[1];
+    r = parseInt(s.slice(0, 2), 16); g = parseInt(s.slice(2, 4), 16); b = parseInt(s.slice(4, 6), 16);
+  } else {
+    const p = h.match(/(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)\D+(\d+(?:\.\d+)?)/);
+    if (!p) return 1;
+    r = +p[1]; g = +p[2]; b = +p[3];
+  }
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+const BAR_VALUE_PLUGIN = {
+  id: 'barValue',
+  afterDatasetsDraw(chart) {
+    const cfg = BAR_VALUE_CFG.get(chart.id);
+    if (!cfg || !cfg.display) return;
+    const horiz = chart.options.indexAxis === 'y';
+    const area = chart.chartArea;
+    const { ctx } = chart;
+    /* 只取这几支 CSS 变量：themeColors() 要读 40 个变量，而 afterDatasetsDraw
+       在动画/悬停/重排的每一帧都跑，整份读一遍是纯浪费 */
+    const ink2 = (typeof getCSS === 'function' && getCSS('--ink-2')) || '#666';
+    const inks = barInks();
+    ctx.save();
+    /* 字号跟 --fs-10 走；字体串只在首次拼一次（字号不随主题变，可以缓存） */
+    if (!_barFont) _barFont = `600 ${(typeof getCSS === 'function' && getCSS('--fs-10')) || '10px'} "Noto Sans SC", sans-serif`;
+    ctx.font = _barFont;
+    chart.data.datasets.forEach((ds, di) => {
+      const meta = chart.getDatasetMeta(di);
+      if (meta.hidden) return;
+      /* 条内文字的颜色按**这一条自己的底色**选，不按整张图的底色 */
+      const bg = ds.backgroundColor || ds.color;
+      const inBar = fillLuma(Array.isArray(bg) ? bg[0] : bg) > 0.6 ? inks.onLightBar : inks.onDarkBar;
+      meta.data.forEach((bar, i) => {
+        const v = ds.data[i];
+        if (v == null || isNaN(v)) return;
+        const txt = cfg.format ? cfg.format(+v) : (Number.isInteger(+v) ? String(+v) : (+v).toFixed(1));
+        ctx.textAlign = horiz ? 'left' : 'center';
+        ctx.textBaseline = horiz ? 'middle' : 'bottom';
+        if (horiz) {
+          const tw = ctx.measureText(txt).width;
+          if (bar.x + tw + 6 > area.right) {   // 条太长放不下 → 画在条内
+            ctx.fillStyle = inBar; ctx.textAlign = 'right'; ctx.fillText(txt, bar.x - 4, bar.y);
+          } else { ctx.fillStyle = ink2; ctx.fillText(txt, bar.x + 4, bar.y); }
+        } else {
+          if (bar.y - 14 < area.top) { ctx.fillStyle = inBar; ctx.textBaseline = 'top'; ctx.fillText(txt, bar.x, bar.y + 5); }
+          else { ctx.fillStyle = ink2; ctx.fillText(txt, bar.x, bar.y - 4); }
+        }
+      });
+    });
+    ctx.restore();
+  },
+};
+let _barFont = null;
+/* 动效三值只读一次：令牌是静态的、系统 reduced-motion 也不会中途变，
+   没必要每建一张图就 getComputedStyle 两次 + 新建一个 matchMedia
+   （一次筛选变化会建 40+ 张图）。首次用到时算好缓存起来。 */
+let _chartMotion = null;
+function chartMotion() {
+  return _chartMotion || (_chartMotion = {
+    reduced: reduceMotion(), slow: cssMs('--dur-slow', 260), fast: cssMs('--dur-fast', 120),
+  });
+}
 function chartDefaults(tc) {
+  const mo = chartMotion();
   return {
     responsive: true, maintainAspectRatio: false,
-    /* v4 里 hover 有自己的默认 intersect:true —— 只写 interaction 会导致
-       鼠标离数据点稍远就「点不亮」。这里把 interaction 和 hover 都显式设为
-       index + intersect:false：悬停任意位置都命中当前 x 列，无死角 */
-    interaction: { mode:'index', intersect:false },
-    hover: { mode:'index', intersect:false },
+    /* 悬停 v2（2026-10-12 用户两次反馈灵敏度差，重写）：
+       ① intersect:false 全局兜底 —— v4 的 hover 自带 intersect:true 默认，
+          只写 interaction 会有「鼠标离图形稍远就点不亮」的死角。
+       ② mode 默认 nearest：永远吸附最近的元素，鼠标在图上任意位置都有反馈；
+          多数据集图表（分组/堆叠/双线）在 makeChart 里升级为 index（整列对齐）。
+       ③ transitions.active 默认 400ms —— 悬停高亮和 tooltip 淡入要等半拍才出现，
+          这才是「不灵敏」的体感主因，压到 120ms 跟手不拖影。 */
+    interaction: { mode:'nearest', intersect:false },
+    hover: { mode:'nearest', intersect:false },
+    /* 入场动画：Chart.js 默认 1000ms，一次筛选变化会让 40+ 张图各跑一遍，
+       是「点一下要等一下」的主因。收进令牌的 --dur-slow（260ms，UI 动效上限 300ms）。
+       easing 用 Chart.js 的 easeOutQuart 对应令牌里的 --ease-out（cubic-bezier(.22,1,.36,1)）。 */
+    animation: mo.reduced ? false : { duration: mo.slow, easing: 'easeOutQuart' },
+    transitions: { active: { animation: { duration: mo.fast } } },
     layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
     plugins: {
       legend: { position:'bottom', labels: { padding:10, usePointStyle:true, pointStyle:'circle', font:{size:10}, boxWidth:6, boxHeight:6, color:tc['ink-2'] } },
@@ -460,7 +607,7 @@ function chartDefaults(tc) {
     },
   };
 }
-function destroyChart(id) { if (chartInstances[id]) { chartInstances[id].destroy(); delete chartInstances[id]; } }
+function destroyChart(id) { if (chartInstances[id]) { BAR_VALUE_CFG.delete(chartInstances[id].id); chartInstances[id].destroy(); delete chartInstances[id]; } }
 function makeChart(id, type, labels, datasets, opts) {
   const el = document.getElementById(id);
   if (!el) return;
@@ -469,11 +616,13 @@ function makeChart(id, type, labels, datasets, opts) {
   const defaults = chartDefaults(tc);
   // fallback 只用 s1..s6：这 6 个色相两两 CIEDE2000 ΔE ≥ 26；s7/s8 区分度弱，不入回退序列
   const palette = [tc.s1, tc.s2, tc.s3, tc.s4, tc.s5, tc.s6];
+  const isHoriz = !!(opts && opts.indexAxis === 'y');
   datasets = datasets.map((d, i) => ({ ...d, color: d.color || palette[i % palette.length] }));
   if (type === 'bar') {
     datasets = datasets.map(d => ({ ...d,
       backgroundColor: d.backgroundColor || d.color, borderWidth: 0,
-      borderRadius: d.borderRadius !== undefined ? d.borderRadius : { topLeft:3, topRight:3 },
+      borderRadius: d.borderRadius !== undefined ? d.borderRadius
+        : (isHoriz ? { topRight:3, bottomRight:3 } : { topLeft:3, topRight:3 }),
       borderSkipped: false, barPercentage: d.barPercentage || 0.65, categoryPercentage: d.categoryPercentage || 0.8,
       maxBarThickness: 40 }));
   } else if (type === 'line') {
@@ -489,6 +638,10 @@ function makeChart(id, type, labels, datasets, opts) {
      plugins.tooltip 就把整套主题化的 tooltip 样式（底色/描边/圆角/标题色）整块顶掉，
      只剩他自己那一个字段，深色模式下会变成白底黑字的原生样式 */
   options.plugins = { ...defaults.plugins, ...op };
+  /* barValue 的配置已在下面提取进 BAR_VALUE_CFG —— 不能留在 options.plugins 里：
+     Chart.js 会把注册插件的 options 当 scriptable 反复解析，函数值被拿上下文调用，
+     就是当年 v.toFixed is not a function 间歇报错的根源 */
+  if (op.barValue) delete options.plugins.barValue;
   options.plugins.tooltip = { ...defaults.plugins.tooltip, ...(op.tooltip || {}) };
   options.scales = { ...defaults.scales, ...((opts && opts.scales) || {}) };
   /* scales 也要深度合并到「轴」这一层：调用方传 scales.y.ticks.autoSkip 等单项时，
@@ -501,12 +654,17 @@ function makeChart(id, type, labels, datasets, opts) {
       }
     }
   }
+  /* 悬停策略（见 chartDefaults 注释）：单数据集用默认 nearest —— 永远吸最近元素，
+     图上任意位置都有反馈、跟手最快；多数据集（分组/堆叠/双线）升级为 index ——
+     一次命中整列，tooltip 能对齐同列各系列。调用方显式传 interaction 时以调用方为准 */
+  if (!(opts && opts.interaction) && datasets.length > 1) {
+    options.interaction = { mode:'index', intersect:false };
+    options.hover = { mode:'index', intersect:false };
+  }
   if (type === 'doughnut') {
     options.cutout = '62%';
-    /* 环形图必须用「最近 + 相交」：默认的 index+intersect:false 会让 tooltip
-       无论鼠标悬在哪（哪怕悬在中心洞里）都固定显示同一片，等于悬停不灵敏 */
-    options.interaction = { mode:'nearest', intersect:true };
-    options.hover = { mode:'nearest', intersect:true };
+    /* 环形图弧面之间留白多，chartDefaults 的 nearest + intersect:false 正合适：
+       不必压中弧面，靠近即命中 */
     options.plugins.tooltip.callbacks = { label: ctx => {
       const t = ctx.dataset.data.reduce((a,b)=>a+b,0) || 1;
       return `${ctx.label}: ${ctx.parsed} 人 (${(ctx.parsed/t*100).toFixed(1)}%)`; } };
@@ -515,9 +673,55 @@ function makeChart(id, type, labels, datasets, opts) {
       (ctx.dataset.label ? ctx.dataset.label + ': ' : '') + ctx.parsed.y + ' 人' };
   }
   if (opts && opts.stacked) { options.scales.x.stacked = true; options.scales.y.stacked = true; }
-  chartInstances[id] = new Chart(el.getContext('2d'), { type, data: { labels, datasets }, options });
+  /* 数值标签：柱状图单数据集且 ≤24 根自动开；显式传 plugins.barValue 优先。
+     配置存 BAR_VALUE_CFG（见插件注释），不进 options.plugins */
+  const bvUser = op.barValue;
+  const bv = {
+    display: (bvUser ? bvUser.display !== false : type === 'bar')
+      && datasets.length === 1 && labels.length > 0 && labels.length <= 24,
+    format: bvUser && bvUser.format,
+  };
+  if (bv.display) {
+    options.layout.padding.top = Math.max(options.layout.padding.top, 16);
+    if (isHoriz) options.layout.padding.right = 30;   // 给条尾外置数值留位
+  }
+  const inst = new Chart(el.getContext('2d'),
+    { type, data: { labels, datasets }, options, plugins: [BAR_VALUE_PLUGIN] });
+  BAR_VALUE_CFG.set(inst.id, bv);
+  chartInstances[id] = inst;
 }
 function barChart(id, labels, datasets, opts) { makeChart(id, 'bar', labels, datasets, opts); }
+/* 分类图表：默认竖柱（用户拍板 2026-10-12），仅「有需要」时自动转横条 ——
+   有需要 = 任一类别名 ≥6 个全角字符宽，或类别数 >12（竖柱标签会斜着挤成一团）。
+   横条时容器高度按类别数自适应（每条约 26px，170~620px 封顶）；
+   竖条时清掉内联高度，还原 chart-box 的类高（tall/short/默认 270）。
+   ⚠ 历史调用都按横条传 scales.y.ticks.autoSkip（那时类别轴在 y），
+     自动转竖柱时把这层配置平移到 x 轴，调用方一行不用改。 */
+function hbarChart(id, labels, datasets, opts) {
+  opts = opts || {};
+  const el = document.getElementById(id);
+  const labelWidth = s => { let w = 0; for (const ch of String(s)) w += ch.charCodeAt(0) > 0x2e80 ? 1 : 0.55; return w; };
+  const n = Math.max(labels.length, ...datasets.map(d => (d.data || []).length));
+  const horiz = labels.some(l => labelWidth(l) >= 6) || n > 12;
+  const o = Object.assign({}, opts, { indexAxis: horiz ? 'y' : 'x' });
+  if (horiz) {
+    if (el && el.parentElement) {
+      const h = Math.min(620, Math.max(170, n * ((opts.barH) || 26) + 46));
+      el.parentElement.style.height = h + 'px';
+    }
+    o.plugins = Object.assign({
+      tooltip: { callbacks: { label: ctx => (ctx.dataset.label ? ctx.dataset.label + ': ' : '') + ctx.parsed.x + ' 人' } },
+    }, opts.plugins);
+    o.scales = Object.assign({ x: { beginAtZero: true } }, opts.scales);
+  } else {
+    if (el && el.parentElement) el.parentElement.style.height = '';
+    o.plugins = Object.assign({}, opts.plugins);
+    if (o.scales && o.scales.y && o.scales.y.ticks && !o.scales.x) {
+      o.scales.x = o.scales.y; delete o.scales.y;
+    }
+  }
+  makeChart(id, 'bar', labels, datasets, o);
+}
 function lineChart(id, labels, datasets, opts) { makeChart(id, 'line', labels, datasets, opts); }
 function doughnutChart(id, labels, data, colors) {
   destroyChart(id);
@@ -539,7 +743,12 @@ function doughnutChart(id, labels, data, colors) {
 let toastTimer = null;
 function showToast(msg, isError) {
   let el = document.getElementById('appToast');
-  if (!el) { el = document.createElement('div'); el.id = 'appToast'; document.body.appendChild(el); }
+  if (!el) {
+    el = document.createElement('div'); el.id = 'appToast'; document.body.appendChild(el);
+    /* 读屏可达：提示内容变化时播报（审查 A2） */
+    el.setAttribute('role', 'status');
+    el.setAttribute('aria-live', 'polite');
+  }
   el.textContent = msg;
   el.className = isError ? 'error show' : 'show';
   if (toastTimer) clearTimeout(toastTimer);
@@ -556,4 +765,111 @@ function buildDeptPairs() {
 function getDeptLabel(en) {
   const f = deptPairs.find(p => p.en === en);
   return f && f.cn && f.cn !== f.en ? `${f.en} (${f.cn})` : en;
+}
+
+/* ═══ 筛选弹窗值列表（table.js 员工明细 / grid.js 台账表共用）═══
+   日期列自动分组 年→月→日（Excel 风格，年份降序、月日升序）；每行 hover 出「仅筛此项」。
+   约定：叶子 checkbox 一律带 data-val=真实筛选值（collectChecked 只认 data-val），
+   分组节点 checkbox 用 .cb-node（不带 data-val，只做批量勾选 + indeterminate 呈现）。
+   每次渲染注册两个钩子：__fpOnChange（勾选变化→套用筛选）与 __fpApplyOnly（仅筛此项→直接设值）。 */
+/* 焦点落位（老浏览器没有 focus(options) 就走无参版） */
+function fpFocus(el) {
+  if (!el || !el.focus) return;
+  try { el.focus({ preventScroll: true }); } catch (e) { try { el.focus(); } catch (e2) {} }
+}
+/* 弹窗外壳：读屏可达 + 焦点进弹窗（table.js 员工明细 / grid.js 台账表同一套规范） */
+function fpPlacePopup(popup, rect, fallbackW, fallbackH) {
+  /* 贴在触发器下方，并钳在视口内——不夹的话，表格底部那几行的表头会把弹窗顶到屏幕外。
+     尺寸取浮层**实际**的 offsetWidth/Height（拿不到再用兜底），比写死一个数更准；
+     左侧留 6px 边距，免得贴到屏幕边上。调用前须已 display:block。 */
+  const w = popup.offsetWidth || fallbackW || 320;
+  const h = popup.offsetHeight || fallbackH || 300;
+  popup.style.left = Math.max(6, Math.min(rect.left, window.innerWidth - w - 6)) + 'px';
+  popup.style.top = Math.min(rect.bottom + 2, window.innerHeight - h - 6) + 'px';
+}
+function fpOpenDialog(popup, label) {
+  popup.setAttribute('role', 'dialog');
+  popup.setAttribute('aria-label', label);
+  popup.tabIndex = -1;
+  fpFocus(popup);
+}
+/* 弹窗顶部标题条（两处弹窗外壳共用）。样式全在 style.css 的 .fp-head / .fp-close，这里只出结构。 */
+function fpHeaderHtml(title, closeJs) {
+  return `<div class="fp-head"><span>${esc(title)}</span><span class="fp-close" role="button" tabindex="0" aria-label="关闭" onclick="${closeJs}" onkeydown="if(event.key==='Enter'||event.key===' '){${closeJs}}"><span class="mi">close</span></span></div>`;
+}
+const FP_DATE_RE = /^\d{4}-\d{1,2}-\d{1,2}$/;
+function fpIsDateCol(entries) { return entries.length > 1 && entries.every(e => FP_DATE_RE.test(e.value)); }
+/* depth 只用来算缩进：CSS 拿 --fp-depth 乘以每级步长（见 .fp-row），JS 不再拼 px。 */
+function fpLeafRow(e, i, selected, onChangeJs, depth) {
+  return `<label class="fp-row" style="--fp-depth:${depth}"><input type="checkbox" data-val="${esc(e.value)}"${selected.has(e.value) ? ' checked' : ''} onchange="${onChangeJs}"><span class="fp-val">${esc(e.value)}</span><span class="fp-count">${e.count}</span><span class="fp-only" role="button" tabindex="0" aria-label="仅筛 ${esc(e.value)}" onclick="fpOnlyThis(event,this)" onkeydown="if(event.key==='Enter'||event.key===' '){fpOnlyThis(event,this)}" data-mode="leaf" data-i="${i}">仅筛此项</span></label>`;
+}
+function fpRenderList(entries, selected, onChangeJs) {
+  window.__fpLeafVals = entries.map(e => e.value);
+  if (!fpIsDateCol(entries)) {
+    return entries.map((e, i) => fpLeafRow(e, i, selected, onChangeJs, 0)).join('');
+  }
+  /* 树构建：ISO 日期字符串字典序=时间序，entries 已升序 → 每个节点覆盖一段连续下标 [a,b] */
+  const root = { ch: new Map(), a: Infinity, b: -1 };
+  entries.forEach((e, i) => {
+    let node = root; node.a = Math.min(node.a, i); node.b = Math.max(node.b, i);
+    const [y, m, d] = e.value.split('-');
+    [y + '年', parseInt(m, 10) + '月', parseInt(d, 10) + '日'].forEach(lab => {
+      if (!node.ch.has(lab)) node.ch.set(lab, { ch: new Map(), a: Infinity, b: -1 });
+      node = node.ch.get(lab); node.a = Math.min(node.a, i); node.b = Math.max(node.b, i);
+    });
+  });
+  const cnt = n => { let s = 0; for (let i = n.a; i <= n.b; i++) s += entries[i].count; return s; };
+  const render = (n, depth) => {
+    let html = '';
+    const kids = [...n.ch.entries()];
+    /* 年份层降序（最新在前），月/日层升序 */
+    if (depth === 0) kids.sort((x, y) => parseInt(y[0]) - parseInt(x[0]));
+    else kids.sort((x, y) => parseInt(x[0]) - parseInt(y[0]));
+    for (const [lab, c] of kids) {
+      if (!c.ch.size) { html += fpLeafRow(entries[c.a], c.a, selected, onChangeJs, depth); continue; }
+      html += `<div class="fp-node"><div class="fp-row" style="--fp-depth:${depth}"><span class="fp-arrow mi collapsed" role="button" tabindex="0" aria-label="展开或收起 ${esc(lab)}" onclick="fpToggleNode(event,this)" onkeydown="if(event.key==='Enter'||event.key===' '){fpToggleNode(event,this)}">expand_more</span><input type="checkbox" class="cb-node" onchange="fpNodeChange(this)" aria-label="全选 ${esc(lab)}"><b class="fp-node-label">${esc(lab)}</b><span class="fp-count">${cnt(c)}</span><span class="fp-only" role="button" tabindex="0" aria-label="仅筛 ${esc(lab)}" onclick="fpOnlyThis(event,this)" onkeydown="if(event.key==='Enter'||event.key===' '){fpOnlyThis(event,this)}" data-mode="range" data-a="${c.a}" data-b="${c.b}">仅筛此项</span></div><div class="fp-children">${render(c, depth + 1)}</div></div>`;
+    }
+    return html;
+  };
+  return render(root, 0);
+}
+window.fpToggleNode = function (ev, el) {
+  ev.preventDefault(); ev.stopPropagation();
+  /* 展开/收起与箭头朝向都由状态类表达（.fp-node.open / .fp-arrow.collapsed），
+     JS 不再直接写 display 与 transform —— 初始态也走同一套类，样式不会两处漂。 */
+  const open = el.closest('.fp-node').classList.toggle('open');
+  el.classList.toggle('collapsed', !open);
+};
+window.fpNodeChange = function (cb) {
+  cb.closest('.fp-node').querySelector('.fp-children')
+    .querySelectorAll('input[type=checkbox][data-val]').forEach(c => { c.checked = cb.checked; });
+  window.__fpOnChange && window.__fpOnChange();
+  fpSyncNodes();
+};
+window.fpOnlyThis = function (ev, el) {
+  ev.preventDefault(); ev.stopPropagation();
+  const vals = window.__fpLeafVals || [];
+  const set = new Set();
+  if (el.dataset.mode === 'leaf') set.add(vals[+el.dataset.i]);
+  else for (let i = +el.dataset.a; i <= +el.dataset.b; i++) set.add(vals[i]);
+  window.__fpApplyOnly && window.__fpApplyOnly(set);
+  document.querySelectorAll('#filterPopup input[type=checkbox][data-val]')
+    .forEach(c => { c.checked = set.has(c.dataset.val); });
+  fpSyncNodes();
+};
+/* 分组节点 / 全选框的勾选态同步（叶子态是唯一事实源） */
+function fpSyncNodes() {
+  document.querySelectorAll('#filterPopup .cb-node').forEach(cb => {
+    const leaves = [...cb.closest('.fp-node').querySelectorAll('input[type=checkbox][data-val]')];
+    const on = leaves.filter(c => c.checked).length;
+    cb.checked = on > 0 && on === leaves.length;
+    cb.indeterminate = on > 0 && on < leaves.length;
+  });
+  const all = document.querySelector('#filterPopup .cb-all');
+  if (all) {
+    const leaves = [...document.querySelectorAll('#filterPopup input[type=checkbox][data-val]')];
+    const on = leaves.filter(c => c.checked).length;
+    all.checked = leaves.length > 0 && on === leaves.length;
+    all.indeterminate = on > 0 && on < leaves.length;
+  }
 }

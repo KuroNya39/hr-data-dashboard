@@ -3,9 +3,7 @@
    ═══════════════════════════════════════════════════════════════ */
 
 /* ── IndexedDB 本地缓存（刷新免重传） ── */
-/* 库名可被分享版覆盖：分享版必须用独立的库，
-   否则它会从完整版留下的快照里恢复出「含其他中心」的数据，
-   物理裁剪的防护就被自己的缓存绕过去了 */
+/* 库名可被 window.HR_IDB_NAME 覆盖（兼容机制，内部版默认不用） */
 const IDB_NAME = (typeof window !== 'undefined' && window.HR_IDB_NAME) || 'hr-dashboard-v8';
 function idbOpen() {
   return new Promise((res, rej) => {
@@ -51,14 +49,6 @@ async function restoreSnapshot() {
     });
   } catch (e) { return null; }
 }
-async function clearSnapshot() {
-  try {
-    const db = await idbOpen();
-    db.transaction('kv', 'readwrite').objectStore('kv').delete('snapshot');
-  } catch (e) {}
-  location.reload();
-}
-
 /* ── 文件读取 ── */
 function readWorkbook(file) {
   return new Promise((res, rej) => {
@@ -79,7 +69,6 @@ function readWorkbook(file) {
 
    数据包里存的是 AOA（数组的数组）。这里用 aoa_to_sheet 还原成 workbook，
    直接复用下面的 ingestWorkbook，解析口径与「拖文件进来」完全一致。 */
-let _packedBooks = { emp: null, perf: null, ledger: null, manual: null };
 function packSheetToWorkbook(sheets) {
   const wb = { SheetNames: [], Sheets: {} };
   for (const [name, aoa] of (sheets || [])) {
@@ -89,22 +78,19 @@ function packSheetToWorkbook(sheets) {
   }
   return wb;
 }
-function wbToPack(wb) {
-  return wb.SheetNames.map(n => [n, XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '', blankrows: false })]);
-}
 function hasPack() {
   return !!(typeof window !== 'undefined' && window.HR_DATA && window.HR_DATA.books && window.HR_DATA.books.emp);
 }
 
 /* 台账工作簿识别（汇总表里的台账 sheet，按关键字认表） */
-const LEDGER_SIGNALS = ['组织架构','人员情况','校招需求','外包名单','外包评价','入职名单','招聘未达成','储备干部','高潜','部门梯队','C型干部','校招名单'];
+const LEDGER_SIGNALS = ['组织架构','人员情况','校招需求','外包名单','外包评价','入职名单','招聘未达成','储备干部','高潜','部门梯队','C型干部','校招名单','OD名单'];
 function looksLikeLedger(wb) {
   return wb.SheetNames.filter(sn => LEDGER_SIGNALS.some(s => sn.includes(s))).length >= 2;
 }
 
 /* ═══════════ 汇总表（data/ 下手工维护的那张，表名见 bu-config.js 的 book）═══════════
    用户手工维护的唯一原数据表（13 张 sheet），人员花名册基准仍是 data/KPA*.xls：
-     花名册 sheet（分享白名单，用户从 KPA 手动复制） /
+     花名册 sheet（用户从 KPA 手动复制维护） /
      干部梯队·人才梯队 26H1绩效考评明细 / 绩效B-C人员情况 /
      C型干部名单 · 储备干部名单 · 高潜名单 · 招聘未达成需求 · 27届校招需求 ·
      26届校招名单 · 本年度入职名单 · 外包评价 · 部门梯队
@@ -116,7 +102,7 @@ function looksLikeLedger(wb) {
      否则「生成数据包」和「从 data 文件夹读取」会读出不同结果。
    ⚠ isRosterSheet 的花名册名必须**锚定 sheet 名开头**（名单见 bu-config.js 的 rosterSheet）：
      本年度入职名单 / 高潜名单 / C型干部名单 都含「名单」，
-     宽松匹配会把它们误当分享白名单。 */
+     宽松匹配会把它们误当花名册。 */
 const CONSOLIDATED_NAME = BU.book;
 const isEmpSheet    = sn => /^人员数据/.test(sn);
 const isPerfSheet   = sn => /绩效考评明细/.test(sn);
@@ -146,7 +132,6 @@ async function ingestConsolidated(wb, stats) {
       ledgerData = parseLedgerWorkbook(lw);
       ledgerSavedAt = nowStamp();
       stats.ledgerFiles++;
-      _packedBooks.ledger = wbToPack(lw);
     } catch (e) { console.warn('汇总表·台账解析失败：', e); }
   }
   /* ② 绩效 */
@@ -154,7 +139,7 @@ async function ingestConsolidated(wb, stats) {
   if (pw.SheetNames.length) {
     try {
       const nc = parsePerfWorkbook(pw);
-      if (nc > 0) { stats.perfCount += nc; perfFileLoaded = true; stats.perfFiles++; _packedBooks.perf = wbToPack(pw); }
+      if (nc > 0) { stats.perfCount += nc; perfFileLoaded = true; stats.perfFiles++; }
     } catch (e) { console.warn('汇总表·绩效解析失败：', e); }
   }
   /* ③ 人员（走通用识别，保留「按工号覆盖合并」的语义） */
@@ -173,39 +158,12 @@ async function ingestConsolidated(wb, stats) {
     } catch (e) { console.warn('汇总表·手工数据源解析失败：', e); }
   }
 }
-/* 从已加载的数据包里取花名册的工号集合（分享时「发谁不发谁」的名单） */
-function rosterIdsFromPack() {
-  const packs = [];
-  if (_packedBooks.manual) packs.push(_packedBooks.manual);
-  if (window.HR_DATA && window.HR_DATA.books && window.HR_DATA.books.manual) packs.push(window.HR_DATA.books.manual);
-  for (const sheets of packs) {
-    const hit = (sheets || []).find(([n]) => BU.rosterSheet.test(n) || /花名册/.test(n));
-    if (!hit) continue;
-    const aoa = hit[1] || [];
-    if (aoa.length < 2) continue;
-    let h = 0;
-    for (let i = 0; i < Math.min(aoa.length, 6); i++) {
-      if (aoa[i] && aoa[i].some(c => String(c).includes('员工编号'))) { h = i; break; }
-    }
-    const iId = (aoa[h] || []).findIndex(c => String(c).includes('员工编号'));
-    if (iId < 0) continue;
-    const ids = new Set();
-    aoa.slice(h + 1).forEach(r => {
-      const v = String((r && r[iId]) == null ? '' : r[iId]).trim();
-      if (v) ids.add(v);
-    });
-    if (ids.size) return ids;
-  }
-  return null;
-}
-
 async function ingestWorkbook(wb, stats) {
   // ① 台账文件优先识别
   if (looksLikeLedger(wb)) {
     ledgerData = parseLedgerWorkbook(wb);
     ledgerSavedAt = nowStamp();
     stats.ledgerFiles++;
-    _packedBooks.ledger = wbToPack(wb);   // 此时 !ref 已被 sheetRowsSafe 裁过，范围是干净的
     return;
   }
   // ② 人员主数据
@@ -225,7 +183,6 @@ async function ingestWorkbook(wb, stats) {
           else { idx.set(r.id, rawData.length); rawData.push(r); stats.added++; }
         });
         stats.empFiles++;
-        _packedBooks.emp = wbToPack(wb);
         break;
       }
     }
@@ -233,7 +190,7 @@ async function ingestWorkbook(wb, stats) {
   // ③ 绩效文件
   if (!isEmp || /绩效|perf/i.test(stats.currentName || '')) {
     const nc = parsePerfWorkbook(wb);
-    if (nc > 0) { stats.perfCount += nc; perfFileLoaded = true; stats.perfFiles++; _packedBooks.perf = wbToPack(wb); }
+    if (nc > 0) { stats.perfCount += nc; perfFileLoaded = true; stats.perfFiles++; }
   }
 }
 
@@ -287,42 +244,13 @@ function ledgerBoardCount() {
   return n;
 }
 
-function uploadEmpData() {
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.xls,.xlsx,.csv'; input.multiple = true;
-  input.onchange = () => input.files.length && handleFiles(input.files);
-  input.click();
-}
-function uploadPerfData() {
+/* 顶栏「上传数据」：单一入口，多选文件 / 整份汇总表都走 handleFiles。
+   识别在 ingestWorkbook 里（台账 → 人员 → 绩效依次判定），
+   所以不必再让用户先选对「这是人员还是绩效」——选错按钮比不识别更糟 */
+function uploadData() {
   const input = document.createElement('input');
   input.type = 'file'; input.accept = '.xls,.xlsx'; input.multiple = true;
-  input.onchange = async () => {
-    if (!input.files.length) return;
-    let n = 0;
-    for (const f of input.files) {
-      try { n += parsePerfWorkbook(await readWorkbook(f)); } catch (err) { showToast('绩效文件解析失败：' + f.name, true); }
-    }
-    /* perfFileLoaded 也得置上：它决定顶栏那个绿点亮不亮，
-       以前只有走整批上传才会置，单点「上传绩效数据」进来后绿点一直不亮 */
-    if (n > 0) { perfFileLoaded = true; attachPerfData(); await onDataLoaded(); showToast(`新增绩效记录 ${n} 条`); }
-    else showToast('未识别到绩效数据', true);
-  };
-  input.click();
-}
-function uploadLedgerData() {
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.xls,.xlsx'; input.multiple = false;
-  input.onchange = async () => {
-    if (!input.files.length) return;
-    try {
-      const wb = await readWorkbook(input.files[0]);
-      if (!looksLikeLedger(wb)) { showToast('这不是台账文件（未识别到台账 sheet）', true); return; }
-      ledgerData = parseLedgerWorkbook(wb);
-      ledgerSavedAt = nowStamp();
-      await onDataLoaded();
-      showToast(`台账已更新：${ledgerBoardCount()} 个板块`);
-    } catch (e) { showToast('台账解析失败：' + e.message, true); }
-  };
+  input.onchange = () => input.files.length && handleFiles(input.files);
   input.click();
 }
 
@@ -334,7 +262,6 @@ async function onDataLoaded(restored) {
   populateStaticFilters();
   refreshFilterOptions('__init__');
   lockDefaultCenter();              // 默认锁定本部门（可在筛选器切换）
-  updatePerfStatus();
   if (!restored) dataSavedAt = nowStamp();
   refreshAll();
   if (!restored) await saveSnapshot();
@@ -349,32 +276,21 @@ function lockDefaultCenter(force) {
     refreshFilterOptions('center');
   }
 }
-function updatePerfStatus() {
-  const el = document.getElementById('perfStatus');
-  const dot = document.getElementById('perfDot');
-  if (perfFileLoaded && perfMeta.count > 0) {
-    el.style.display = 'inline';
-    el.style.fontSize = '12px';
-    el.style.color = 'var(--ink-3)';
-    el.textContent = `绩效覆盖 ${perfMeta.count} 人${perfMeta.centers.length ? '（' + perfMeta.centers.join('/') + ' 梯队）' : ''}`;
-    dot.className = 'btn-dot loaded';
-  } else { el.style.display = 'none'; dot.className = 'btn-dot'; }
-  const ldot = document.getElementById('ledgerDot');
-  if (ldot) ldot.className = ledgerData ? 'btn-dot loaded' : 'btn-dot';
-  // 人员数据那个绿点此前没有任何代码去点亮它，传完还是灰的，看着像没传上
-  const edot = document.getElementById('empDot');
-  if (edot) edot.className = rawData.length ? 'btn-dot loaded' : 'btn-dot';
-}
 
-/* ── 筛选器（人群 + 5 维互联） ── */
+/* ── 筛选器（人群/用工合并 + 4 维互联）──
+   2026-10-13：人群与用工类型合并为一个下拉（optgroup 分组，用工值带 t: 前缀），
+   筛选栏收成一行（用户要求） */
 const FILTER_DEFS = [
   { key:'group',    id:'filterGroup',    fn: d => staffGroupOf(d), labelFn: v => GROUP_LABEL[v] || v, isGroup:true },
   { key:'status',   id:'filterStatus',   fn: d => d.status },
   { key:'center',   id:'filterCenter',   fn: d => d.center },
   { key:'dept',     id:'filterDept',     fn: d => d.deptEn || d.dept },
   { key:'location', id:'filterLocation', fn: d => d.workLocation },
-  { key:'type',     id:'filterType',     fn: d => d.empType },
 ];
+/* 't:试用期' → 所属人群；普通值原样返回（effFlowType / 结构分布区共用） */
+function groupFilterVal(g) {
+  return g && g.startsWith('t:') ? (staffGroupOf({ empType: g.slice(2) }) || 'all') : g;
+}
 function getFilterValues(excludeKey) {
   const v = { fromDate:'', toDate:'' };
   FILTER_DEFS.forEach(f => {
@@ -388,16 +304,28 @@ function getFilterValues(excludeKey) {
 function getFiltered(excludeKey) {
   const f = getFilterValues(excludeKey);
   return rawData.filter(d => {
-    if (f.group !== 'all' && staffGroupOf(d) !== f.group) return false;
+    if (f.group !== 'all') {
+      if (f.group.startsWith('t:')) { if (d.empType !== f.group.slice(2)) return false; }
+      else if (staffGroupOf(d) !== f.group) return false;
+    }
     if (f.status !== 'all' && d.status !== f.status) return false;
     if (f.center !== 'all' && d.center !== f.center) return false;
     if (f.dept !== 'all' && (d.deptEn || d.dept) !== f.dept) return false;
     if (f.location !== 'all' && d.workLocation !== f.location) return false;
-    if (f.type !== 'all' && d.empType !== f.type) return false;
     if (f.fromDate && (!d.joinDate || d.joinDate < f.fromDate)) return false;
     if (f.toDate && (!d.joinDate || d.joinDate > f.toDate)) return false;
     return true;
   });
+}
+/* 人群/用工合并下拉：optgroup 分组，值 = 人群key 或 't:用工类型' */
+function buildGroupFilter(sel) {
+  const cur = sel.value;
+  const typeVals = [...new Set(rawData.map(d => d.empType).filter(Boolean))].sort();
+  let html = '<option value="all">全部</option>' +
+    '<optgroup label="按人群">' + GROUP_ORDER.map(v => `<option value="${v}">${esc(GROUP_LABEL[v] || v)}</option>`).join('') + '</optgroup>';
+  if (typeVals.length) html += '<optgroup label="按用工类型">' + typeVals.map(v => `<option value="t:${esc(v)}">${esc(v)}</option>`).join('') + '</optgroup>';
+  sel.innerHTML = html;
+  sel.value = (cur && [...sel.options].some(o => o.value === cur)) ? cur : 'all';
 }
 function populateStaticFilters() {
   const statusSel = document.getElementById('filterStatus');
@@ -406,10 +334,11 @@ function populateStaticFilters() {
 function refreshFilterOptions(changedKey) {
   FILTER_DEFS.forEach(f => {
     if (f.key === changedKey) return;
-    const data = getFiltered(f.key);
-    const vals = [...new Set(data.map(f.fn).filter(Boolean))].sort();
     const sel = document.getElementById(f.id);
     if (!sel) return;
+    if (f.key === 'group') { buildGroupFilter(sel); return; }   // 合并下拉：静态分组结构
+    const data = getFiltered(f.key);
+    const vals = [...new Set(data.map(f.fn).filter(Boolean))].sort();
     const cur = sel.value;
     const label = v => f.labelFn ? f.labelFn(v) : (f.key === 'dept' ? getDeptLabel(v) : v);
     sel.innerHTML = '<option value="all">全部</option>' +
@@ -434,72 +363,66 @@ function updateFilterStat() {
   const act = filtered.filter(d => d.status === '在职');
   const g = groupCounts(act);
   document.getElementById('filterStat').textContent =
-    `${filtered.length} 人 · 在职 ${act.length}（正式 ${g.formal} · 实习 ${g.intern} · 外协 ${g.outsource}）· 全库 ${rawData.length}`;
+    `${filtered.length} 人 · 在职 ${act.length}（正${g.formal}/实${g.intern}/外${g.outsource}）· 全库 ${rawData.length}`;
 }
 
-/* ── 页面切换 ── */
+/* ── 页面切换 ──
+   只存顶栏标题（副标题随 #pageBreadcrumb 一并移除，不再维护） */
 const PAGE_TITLES = {
-  overview:['总览','三类人群 · 核心人力指标'], structure:['组织与用工','部门下钻 · 职级与用工结构'],
-  demographics:['人员结构','年龄 · 学历 · 地点 · 经验'], turnover:['人员流动','正式员工离职率与三块流出'],
-  ops:['转正与合同','试用期与协议到期管理'], talent:['梯队绩效盘点','九宫格 · 排名 · 投入'],
-  health:['职级健康度','金字塔与双通道'], ledger:['HR 工作台账','招聘缺口 · 末位改进 · 储备干部 · 高潜'],
-  employee:['员工明细','全字段列表 · 列筛选 · 导出'],
-  brief:['简报模式','一页汇报 · 打印存 PDF'],
+  overview:'总览',
+  turnover:'人员流动',
+  ops:'转正与合同', talent:'梯队绩效盘点',
+  employee:'员工明细',
   /* ── 新菜单（一级 + 二级）── */
-  people:['人员概览','现在的人怎么样 · 规模 · 结构 · 变化 · 预警'],
-  move:['人员异动','人员流动 · 转正与合同'],
-  recruit_overview:['招聘概览','建设中'], recruit_need:['招聘需求','建设中'],
-  campus_overview:['校招概览','建设中'], campus_need:['校招需求','建设中'], campus_emp:['校招生','建设中'],
-  talent_overview:['人才概览','建设中'], talent_list:['梯队名单','建设中'], talent_perf:['梯队绩效','梯队盘点 · 九宫格 · 排名'],
-  cadre_overview:['干部概览','建设中'], cadre_list:['干部名单','建设中'], cadre_perf:['干部绩效','建设中'],
-  perf_overview:['绩效概览','建设中'], perf_alert:['绩效预警','建设中'],
-  outsource_overview:['外包概览','建设中'], outsource_emp:['外包人员','建设中'], outsource_eval:['外包评价','建设中'],
+  people:'人员概览',
+  move:'人员异动',
+  recruit_overview:'社招概览', recruit_need:'社招需求',
+  campus_overview:'校招概览', campus_need:'校招需求', campus_track:'校招跟踪',
+  talent_hp:'高潜名单', talent_res:'储备干部', cadre_c:'C型干部',
+  perf_overview:'绩效概览', perf_review:'梯队考评', perf_alert:'绩效预警',
+  outsource_overview:'外包概览', outsource_emp:'外包人员',
 };
 /* 二级菜单归属（切换页面时自动展开对应分组并高亮） */
 const PAGE_GROUPS = {
   people:'people', move:'people', employee:'people',
   recruit_overview:'recruit', recruit_need:'recruit',
-  campus_overview:'campus', campus_need:'campus', campus_emp:'campus',
-  talent_overview:'talent', talent_list:'talent', talent_perf:'talent',
-  cadre_overview:'cadre', cadre_list:'cadre', cadre_perf:'cadre',
-  perf_overview:'perf', perf_alert:'perf',
-  outsource_overview:'outsource', outsource_emp:'outsource', outsource_eval:'outsource',
+  campus_overview:'recruit', campus_need:'recruit', campus_track:'recruit',
+  talent_hp:'talent', talent_res:'talent', cadre_c:'talent',
+  perf_overview:'perf', perf_review:'perf', perf_alert:'perf',
+  outsource_overview:'outsource', outsource_emp:'outsource',
 };
-/* 一个菜单项承载多个现有页面（人员异动 = 人员流动 + 转正与合同；梯队绩效 = 旧梯队绩效盘点页） */
-const PAGE_MULTI = { move:['turnover','ops'], talent_perf:['talent'] };
+/* 一个菜单项承载多个现有页面（人员异动 = 人员流动 + 转正与合同；梯队考评 = 真实九宫格盘点页） */
+const PAGE_MULTI = { move:['turnover','ops'], perf_review:['talent'] };
 /* 未实现菜单 → 通用占位页 */
 const PLACEHOLDER_PAGES = new Set([
-  'recruit_overview','recruit_need',
-  'campus_overview','campus_need','campus_emp',
-  'talent_overview','talent_list',
-  'cadre_overview','cadre_list','cadre_perf',
+  'campus_overview',
+  'talent_hp','talent_res','cadre_c',
   'perf_overview','perf_alert',
-  'outsource_overview','outsource_emp','outsource_eval',
+  'outsource_overview','outsource_emp',
 ]);
 /* 每个占位页的说明（说明该模块将来会放什么数据，来自台账 sheet） */
 const PLACEHOLDER_DESC = {
-  recruit_overview:['招聘概览','招聘进度总览与达成情况。', '数据来源：招聘未达成需求 / 27届校招需求'],
-  recruit_need:['招聘需求','招聘需求清单与缺口跟踪。', '数据来源：招聘未达成需求'],
-  campus_overview:['校招概览','校招进度与批次总览。', '数据来源：27届校招需求 / 26届校招名单'],
-  campus_need:['校招需求','校招需求计划与缺口。', '数据来源：27届校招需求'],
-  campus_emp:['校招生','校招生名单与状态跟踪。', '数据来源：26届校招名单'],
-  talent_overview:['人才概览','人才盘点总览与结构分布。', '数据来源：储备干部名单 / 高潜名单 / 人才梯队绩效'],
-  talent_list:['梯队名单','人才梯队成员名单。', '数据来源：储备干部名单 / 高潜名单'],
-  cadre_overview:['干部概览','C 型干部总览与结构分布。', '数据来源：C型干部名单 / 干部梯队绩效'],
-  cadre_list:['干部名单','C 型干部名单。', '数据来源：C型干部名单'],
-  cadre_perf:['干部绩效','C 型干部绩效盘点。', '数据来源：干部梯队26H1绩效考评明细'],
-  perf_overview:['绩效概览','绩效等级分布与趋势总览。', '数据来源：人才/干部梯队绩效明细'],
+  campus_overview:['校招概览','26 届结果与 27 届达成的对比总览（定位待议）。', '数据来源：27届校招需求 / 26届校招名单'],
+  talent_hp:['高潜名单','人才梯队高潜认证名单（含最快晋升 T3 预测）。', '数据来源：高潜名单'],
+  talent_res:['储备干部','拟任用后备干部（技储）名单，自带干部队列标注。', '数据来源：储备干部名单'],
+  cadre_c:['C型干部','在任二级部门主管名单（管理通道 L1/L2）。', '数据来源：C型干部名单'],
+  perf_overview:['绩效概览','B-C 人员跟踪与绩效预警总览。', '数据来源：绩效B-C人员情况'],
   perf_alert:['绩效预警','末位绩效与改进名单。', '数据来源：绩效B-C人员情况'],
-  outsource_overview:['外包概览','外包规模与成本结构。', '数据来源：外包人员 / 外包评价'],
-  outsource_emp:['外包人员','外包人员名单。', '数据来源：外包人员'],
-  outsource_eval:['外包评价','外包评价记录。', '数据来源：外包评价'],
+  outsource_overview:['外包概览','外包在离岗规模与岗位 / 地点 / 部门评价分布。', '数据来源：OD名单'],
+  outsource_emp:['外包人员','外包人员全字段名单（含月薪 / 主管 / 部门评价）。', '数据来源：OD名单'],
 };
-function toggleNavGroup(headBtn) {
-  const group = headBtn.closest('.nav-group');
-  if (group) group.classList.toggle('open');
+/* 侧栏折叠：一级组与三级分节是同一套交互，只差容器选择器。
+   读屏可达：展开状态同步到 aria-expanded（审查 A2）。 */
+function toggleNavSection(headBtn, sel) {
+  const box = headBtn.closest(sel);
+  if (!box) return;
+  box.classList.toggle('open');
+  headBtn.setAttribute('aria-expanded', box.classList.contains('open'));
 }
+function toggleNavGroup(headBtn) { toggleNavSection(headBtn, '.nav-group'); }
+function toggleNavSec(headBtn) { toggleNavSection(headBtn, '.nav-sec'); }
 function renderPlaceholder(name) {
-  const d = PLACEHOLDER_DESC[name] || [PAGE_TITLES[name] && PAGE_TITLES[name][0] || name, '', ''];
+  const d = PLACEHOLDER_DESC[name] || [PAGE_TITLES[name] || name, '', ''];
   const t = document.getElementById('phTitle');
   const desc = document.getElementById('phDesc');
   const hint = document.getElementById('phHint');
@@ -513,20 +436,20 @@ function switchPage(name) {
   /* 高亮并自动展开所在二级分组 */
   const g = PAGE_GROUPS[name];
   document.querySelectorAll('.nav-group').forEach(el => {
-    const inGroup = g && el.dataset.group === g;
+    /* !! 归一化：g 为 undefined（总览等无分组页）时 inGroup 必须是 false——
+       classList.toggle(name, undefined) 是「翻转」不是「移除」，会把所有分组头翻亮 */
+    const inGroup = !!(g && el.dataset.group === g);
     /* 只有点进某个分组的页才动展开/收起；总览等无分组页只清 head 高亮，
        不动用户的折叠状态（否则点一下总览所有分组全被改掉） */
     if (g) el.classList.toggle('open', inGroup);
     const head = el.querySelector('.nav-group-head');
-    if (head) head.classList.toggle('active', inGroup);
+    if (head) { head.classList.toggle('active', inGroup); head.setAttribute('aria-expanded', el.classList.contains('open')); }
   });
   if (PLACEHOLDER_PAGES.has(name)) renderPlaceholder(name);
   /* 占位页没有自己的 section，落到通用 #page-placeholder */
   const ids = PLACEHOLDER_PAGES.has(name) ? ['placeholder'] : (PAGE_MULTI[name] || [name]);
   document.querySelectorAll('.page').forEach(p => p.classList.toggle('hidden', !ids.includes(p.id.replace('page-', ''))));
-  const t = PAGE_TITLES[name] || [name, ''];
-  document.getElementById('pageTitle').textContent = t[0];
-  document.getElementById('pageBreadcrumb').textContent = t[1];
+  document.getElementById('pageTitle').textContent = PAGE_TITLES[name] || name;
   document.getElementById('sidebar').classList.remove('open');
   document.getElementById('mobileOverlay').classList.remove('open');
   refreshAll();
@@ -536,11 +459,16 @@ function toggleSidebar() {
   document.getElementById('sidebar').classList.toggle('open');
   document.getElementById('mobileOverlay').classList.toggle('open');
 }
+/* Esc 关手机端侧栏（右键菜单与筛选弹窗的 Esc 在 grid.js 里） */
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  const sb = document.getElementById('sidebar');
+  if (sb && sb.classList.contains('open') && typeof toggleSidebar === 'function') toggleSidebar();
+});
 
 /* ── 全局刷新 ── */
 function refreshAll() {
-  // 只丢了台账文件时也要能看台账页，所以这里不能直接 return
-  if (!rawData.length) { renderLedger(); return; }
+  if (!rawData.length) return;
   const filtered = getFiltered();
   const active = filtered.filter(d => d.status === '在职');
   const allActive = rawData.filter(d => d.status === '在职');
@@ -553,14 +481,14 @@ function refreshAll() {
   renderKpiCards(active, allActive, allLeavers);
   renderOverview(active, allActive, allLeavers, themeColors());
   renderPeople(active, allLeavers, themeColors());
-  renderStructure(active, themeColors());
-  renderDemographics(active, themeColors());
-  renderTurnover(allLeavers, allActive, themeColors(), relevantAll);
+  renderStructDist(active, themeColors());
+  renderTurnover(themeColors(), relevantAll);
   renderOps(active, themeColors());
   renderTalent(active, themeColors());
-  renderHealth(active, themeColors());
-  renderLedger();
-  renderBrief(active, allActive, allLeavers, themeColors());
+  renderRecruitOverview(themeColors());
+  renderRecruitNeed(themeColors());
+  renderCampusNeed(themeColors());
+  renderCampusTrack(themeColors());
   renderAlerts();
   if (!document.getElementById('page-employee').classList.contains('hidden')) renderEmployeeTable();
 }
@@ -611,474 +539,6 @@ function fmtBuilt(iso) {
   return d.toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
 
-/* ── 顶栏「重新加载」：丢弃当前状态，从数据包重读一份干净的 ──
-   人员数据在 ingestWorkbook 里是「按工号覆盖合并」进 rawData 的，
-   如果重读前不清空，数据包里去掉了的人会永远残留在看板上 ——
-   所以先重置再整份读；万一没读到，把原状态放回去，别把看板清空。 */
-async function reloadDataSource() {
-  const btn = document.getElementById('dsBtn');
-  if (btn) btn.disabled = true;
-  try {
-    if (!hasPack()) { showToast('没有可用的数据包：assets/hr-data.js 未加载', true); return; }
-    const backup = { rawData, perfData, perfMeta, perfFileLoaded, ledgerData, ledgerSavedAt };
-    rawData = [];
-    perfData = {}; perfMeta = { count: 0, centers: [] }; perfFileLoaded = false;
-    ledgerData = null; ledgerSavedAt = null;
-    _dirListing = null;
-    let got = false;
-    try { got = await loadFromPack(); } catch (e) { console.warn('数据包重读失败：', e.message || e); }
-    if (got) {
-      await onDataLoaded();
-      const b = fmtBuilt(window.HR_DATA.built);
-      showToast('已重新加载数据包' + (b ? '（生成于 ' + b + '）' : '') + '：人员 ' + rawData.length + ' 条');
-    } else {
-      ({ rawData, perfData, perfMeta, perfFileLoaded, ledgerData, ledgerSavedAt } = backup);
-      attachPerfData();
-      refreshAll();
-      showToast('数据包读取失败，已保留当前数据', true);
-    }
-  } finally {
-    if (btn) btn.disabled = false;
-  }
-}
-
-/* ═══════════ 数据维护：把当前数据写回文件 ═══════════
-   双击打开看板时浏览器禁止 fetch 本地文件，但「用户点一下按钮」之后，
-   浏览器允许我们读写用户指定的那个文件夹。于是更新数据这件事
-   可以完全在页面里完成 —— 不需要 bat、不需要装 Python、不需要命令行。 */
-function buildPackText(scope) {
-  const base = (window.HR_DATA && window.HR_DATA.books) || {};
-  const books = {
-    emp:    _packedBooks.emp    || base.emp    || null,
-    perf:   _packedBooks.perf   || base.perf   || null,
-    ledger: _packedBooks.ledger || base.ledger || null,
-    manual: _packedBooks.manual || base.manual || null,
-  };
-  const pack = {
-    v: 1,
-    scope: scope || 'full',
-    built: new Date().toISOString(),
-    files: Object.assign({}, (window.HR_DATA && window.HR_DATA.files) || {}),
-    books,
-  };
-  return '/* 自动生成，请勿手动编辑。来源：data/ 目录下的 Excel */\n'
-       + 'window.HR_DATA=' + JSON.stringify(pack) + ';\n';
-}
-
-/* IndexedDB 里存目录句柄：浏览器允许把「已授权的文件夹」记下来复用，
-   所以第二次之后再点，不用重新选目录 */
-async function idbGetKey(key) {
-  try {
-    const db = await idbOpen();
-    return await new Promise(res => {
-      const rq = db.transaction('kv').objectStore('kv').get(key);
-      rq.onsuccess = () => res(rq.result || null);
-      rq.onerror = () => res(null);
-    });
-  } catch (e) { return null; }
-}
-async function idbSetKey(key, val) {
-  try {
-    const db = await idbOpen();
-    db.transaction('kv', 'readwrite').objectStore('kv').put(val, key);
-  } catch (e) {}
-}
-/* 取一个可写的目录句柄；null = 用户取消或浏览器不支持 */
-async function pickDir(key, hint) {
-  if (typeof window.showDirectoryPicker !== 'function') return null;
-  let h = await idbGetKey(key);
-  if (h) {
-    try {
-      let p = await h.queryPermission({ mode: 'readwrite' });
-      if (p !== 'granted') p = await h.requestPermission({ mode: 'readwrite' });
-      if (p === 'granted') return h;
-    } catch (e) { /* 句柄失效，重新选 */ }
-  }
-  showToast(hint || '请在弹窗里选择文件夹');
-  try {
-    h = await window.showDirectoryPicker({ id: key, mode: 'readwrite', startIn: 'desktop' });
-  } catch (e) { return null; }
-  await idbSetKey(key, h);
-  return h;
-}
-async function writeFileInDir(dir, name, text) {
-  const fh = await dir.getFileHandle(name, { create: true });
-  const w = await fh.createWritable();
-  await w.write(text);
-  await w.close();
-}
-
-/* ① 把当前看板上的数据固化成数据包 → assets/hr-data.js */
-async function saveDataPack() {
-  if (!_packedBooks.emp && !_packedBooks.perf && !_packedBooks.ledger) {
-    showToast('当前没有可保存的数据', true); return;
-  }
-  const text = buildPackText('full');
-  try {
-    const root = await pickDir('fs-dir:root', '请选择「HR看板」这个文件夹');
-    if (!root) return;
-    const assets = await root.getDirectoryHandle('assets', { create: true });
-    await writeFileInDir(assets, 'hr-data.js', text);
-    /* 写进去之后，内存里的 built 也要跟着更新：
-       否则本次会话里再点「重新加载」会拿新的 built 去比旧快照，白白丢掉缓存 */
-    try {
-      if (window.HR_DATA) window.HR_DATA.built = JSON.parse(text.slice(text.indexOf('{'), text.lastIndexOf(';'))).built;
-    } catch (e) {}
-    await saveSnapshot();
-    showToast('已保存数据包 assets/hr-data.js（' + Math.round(text.length / 1024) + ' KB）· 下次双击打开就是这份数据');
-    refreshDataPanel();
-  } catch (e) {
-    showToast('保存失败：' + (e.message || e), true);
-  }
-}
-
-/* ② 裁出「仅本部门」，导出给同事的分享版数据包 → 分享版/assets/hr-data.js
-   empSheetsOverride：可选。传了就用这份人员数据裁（例如你单独维护的花名册），
-   否则用当前看板上的数据裁。
-   rosterIds：可选。传了就是「工号白名单」模式 —— 只保留名单里的工号，
-   与中心列无关（手动维护的花名册就是干这个的）。
-   不传则按「一级部门英文简称 === 本部门代号」自动裁。 */
-function buildSharePackText(empSheetsOverride, rosterIds) {
-  const TARGET = BU.code;
-  const base = (window.HR_DATA && window.HR_DATA.books) || {};
-  const empSrc = empSheetsOverride || _packedBooks.emp || base.emp;
-  if (!empSrc) return null;
-  let kept = 0, dropped = 0;
-  const others = new Set();
-  const hitIds = new Set();
-  const empOut = empSrc.map(([name, aoa]) => {
-    let h = 0;
-    for (let i = 0; i < Math.min(aoa.length, 10); i++) {
-      if (aoa[i] && aoa[i].some(c => String(c).includes('员工编号'))) { h = i; break; }
-    }
-    const header = aoa[h] || [];
-    const ci = header.findIndex(x => String(x).includes('一级部门英文简称'));
-    const iId = header.findIndex(x => String(x).includes('员工编号'));
-    const iName = header.findIndex(x => String(x).includes('员工姓名'));
-    if (!rosterIds && ci < 0) { dropped++; return [name, aoa]; }  // 找不到中心列就原样带过（自检会判不合格）
-    const keep = aoa.slice(h + 1).filter(r => {
-      if (!r || !r.length) return false;
-      if (!r[iId] && !r[iName]) return false;
-      if (rosterIds) {
-        const id = String(r[iId] == null ? '' : r[iId]).trim();
-        if (id && rosterIds.has(id)) { kept++; hitIds.add(id); return true; }
-        dropped++;
-        return false;
-      }
-      const c = String(r[ci] == null ? '' : r[ci]).trim();
-      if (c === TARGET) { kept++; return true; }
-      dropped++;
-      if (c) others.add(c);
-      return false;
-    });
-    return [name, aoa.slice(0, h + 1).concat(keep)];
-  });
-  /* 绩效按本部门工号白名单裁 */
-  const ids = new Set();
-  empOut.forEach(([, aoa]) => {
-    const header = aoa[0] || [];
-    const iId = header.findIndex(x => String(x).includes('员工编号'));
-    if (iId >= 0) aoa.slice(1).forEach(r => { if (r && r[iId]) ids.add(String(r[iId]).trim()); });
-  });
-  const perfSrc = _packedBooks.perf || base.perf;
-  const perfOut = perfSrc ? perfSrc.map(([name, aoa]) => {
-    let h = -1, iId = -1, iCenter = -1;
-    for (let i = 0; i < Math.min(aoa.length, 12); i++) {
-      if (!aoa[i]) continue;
-      const c = aoa[i].findIndex(x => /工号|员工编号/.test(String(x)));
-      if (c >= 0) { h = i; iId = c; iCenter = aoa[i].findIndex(x => /中心/.test(String(x))); break; }
-    }
-    if (h < 0) return [name, aoa];
-    const body = aoa.slice(h + 1).filter(r => {
-      if (!r || !r.length) return false;
-      if (iCenter >= 0) {
-        const c = String(r[iCenter] == null ? '' : r[iCenter]).trim();
-        if (c) return c === TARGET;
-      }
-      const id = String(r[iId] == null ? '' : r[iId]).trim();
-      return id ? ids.has(id) : false;
-    });
-    const tail = aoa.slice(h + 1)
-      .filter(r => !r || !r.length || !String(r[iId] == null ? '' : r[iId]).trim()).slice(0, 12);
-    return [name, aoa.slice(0, h + 1).concat(body, tail.length ? [['']].concat(tail) : [])];
-  }) : null;
-
-  const books = {
-    emp: empOut, perf: perfOut,
-    ledger: _packedBooks.ledger || base.ledger || null,
-    manual: _packedBooks.manual || base.manual || null,
-  };
-  const pack = { v: 1, scope: BU.scope, built: new Date().toISOString(),
-    files: Object.assign({}, (window.HR_DATA && window.HR_DATA.files) || {}), books };
-  const text = '/* 自动生成，请勿手动编辑。分享版：只含本部门 */\n'
-             + 'window.HR_DATA=' + JSON.stringify(pack) + ';\n';
-  /* 安全自检：判据只有一个 ——
-       白名单模式：产出的每一行，工号必须在名单里；
-       自动模式：决定中心归属的那一列的值必须是本部门代号。
-     千万不要对整个 JSON 做全文正则：别的字段里会出现与中心简称同名的值，
-     成本中心描述里也可能包含其他中心的字样 —— 全文扫会一堆误报，
-     结果就是每次都判定「有泄漏」、分享版永远导不出去。 */
-  let leak = 0;
-  empOut.forEach(([name, aoa]) => {
-    let h = 0;
-    for (let i = 0; i < Math.min(aoa.length, 10); i++) {
-      if (aoa[i] && aoa[i].some(c => String(c).includes('员工编号'))) { h = i; break; }
-    }
-    const header = aoa[h] || [];
-    const ci = header.findIndex(x => String(x).includes('一级部门英文简称'));
-    const iId = header.findIndex(x => String(x).includes('员工编号'));
-    if (rosterIds) {
-      if (iId < 0) { leak++; return; }
-      aoa.slice(h + 1).forEach(r => {
-        if (!r || !r.length) return;
-        const id = String(r[iId] == null ? '' : r[iId]).trim();
-        if (!id || !rosterIds.has(id)) leak++;
-      });
-      return;
-    }
-    if (ci < 0) { leak++; return; }          // 找不到中心列 —— 无法保证只有本部门，按不合格处理
-    aoa.slice(h + 1).forEach(r => {
-      if (!r || !r.length) return;
-      if (String(r[ci] == null ? '' : r[ci]).trim() !== TARGET) leak++;
-    });
-  });
-  const missIds = rosterIds ? [...rosterIds].filter(x => !hitIds.has(x)) : [];
-  return { text, kept, dropped, others: [...others].sort(), leak, missIds, mode: rosterIds ? 'roster' : 'center' };
-}
-
-/* 写分享版数据包（导出分享版 / 用花名册导出 / 用指定文件导出，三条路共用） */
-async function writeSharePack(empSheetsOverride, sourceLabel, rosterIds) {
-  const r = buildSharePackText(empSheetsOverride, rosterIds);
-  if (!r) { showToast('没有可用的名单，无法生成分享版', true); return; }
-  if (r.kept === 0) {
-    showToast(rosterIds
-      ? '裁剪后一个人都没有：花名册里的工号在人员数据里一个都没匹配上（核对「员工编号」列）'
-      : '裁剪后一个人都没有：这份数据里不含本部门（检查「一级部门英文简称」列）', true);
-    return;
-  }
-  if (r.leak > 0) {
-    showToast(r.mode === 'roster'
-      ? '自检未通过：产物里有工号不在花名册内，已中止导出'
-      : '自检未通过：产物里出现了其他中心的数据，已中止导出', true);
-    return;
-  }
-  try {
-    const dir = await pickDir('fs-dir:share', '请选择「分享版」这个文件夹');
-    if (!dir) return;
-    const assets = await dir.getDirectoryHandle('assets', { create: true });
-    await writeFileInDir(assets, 'hr-data.js', r.text);
-    showToast('分享版数据已更新'
-      + (sourceLabel ? '（来源：' + sourceLabel + '）' : '')
-      + '：保留 ' + r.kept + ' 人 · 剔除 ' + r.dropped + ' 行'
-      + (r.mode === 'center' ? ' / ' + r.others.length + ' 个其他中心' : '')
-      + (r.missIds && r.missIds.length ? ' · ⚠ 花名册有 ' + r.missIds.length + ' 个工号在人员数据里没找到' : '')
-      + ' · 把「分享版」整个文件夹打包发给同事即可');
-    refreshDataPanel();
-  } catch (e) {
-    showToast('导出失败：' + (e.message || e), true);
-  }
-}
-async function exportSharePack() { await writeSharePack(null, null, null); }
-
-/* 用汇总表里的花名册导出分享版 —— 不用选文件，
-   名单跟着数据包一起进来了（从 KPA 手动复制维护）。
-   删掉名单里的某一行 = 分享版不再包含这个人。
-   名单为空或没找到时，回落到按「一级部门英文简称 === 本部门代号」自动裁剪。 */
-async function exportSharePackByRoster() {
-  const ids = rosterIdsFromPack();
-  if (!ids) {
-    showToast('没找到花名册（或名单是空的），改用「一级部门英文简称」自动裁剪');
-    await writeSharePack(null, null, null);
-    return;
-  }
-  await writeSharePack(null, '花名册 ' + ids.size + ' 人', ids);
-}
-
-/* 用一份指定的 Excel 导出分享版（比花名册更临时：比如这次只想发某几个部门）
-   —— 只读取这份文件来裁，不动当前看板上已加载的数据。 */
-function exportSharePackWithFile() {
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.xls,.xlsx';
-  input.onchange = async () => {
-    const f = input.files && input.files[0];
-    if (!f) return;
-    try {
-      const wb = await readWorkbook(f);
-      /* 判断这份文件是「工号名单」还是「完整人员数据」：
-         有「一级部门英文简称」列就当完整数据按中心裁，
-         只有「员工编号」就当白名单。 */
-      const sheets = wbToPack(wb);
-      let hasCenter = false;
-      (sheets || []).forEach(([, aoa]) => {
-        for (let i = 0; i < Math.min(aoa.length, 10); i++) {
-          if (aoa[i] && aoa[i].some(c => String(c).includes('一级部门英文简称'))) { hasCenter = true; break; }
-        }
-      });
-      if (hasCenter) await writeSharePack(sheets, f.name, null);
-      else {
-        const ids = new Set();
-        (sheets || []).forEach(([, aoa]) => {
-          let h = 0;
-          for (let i = 0; i < Math.min(aoa.length, 6); i++) {
-            if (aoa[i] && aoa[i].some(c => String(c).includes('员工编号'))) { h = i; break; }
-          }
-          const iId = (aoa[h] || []).findIndex(c => String(c).includes('员工编号'));
-          if (iId < 0) return;
-          aoa.slice(h + 1).forEach(r => {
-            const v = String((r && r[iId]) == null ? '' : r[iId]).trim();
-            if (v) ids.add(v);
-          });
-        });
-        if (!ids.size) { showToast('这份文件里没找到「员工编号」列', true); return; }
-        await writeSharePack(null, f.name + '（白名单 ' + ids.size + ' 人）', ids);
-      }
-    } catch (e) {
-      showToast('读取失败：' + (e.message || e), true);
-    }
-  };
-  input.click();
-}
-
-/* ③ 直接从 data/ 文件夹读取（授权一次，之后长期复用）
-   file:// 下 fetch 读不了本地文件，但「用户亲手授权过的文件夹」可以读。
-   这是日常更新数据最省事的一条路：改完 Excel 点一下就读到了 ——
-   既不用把文件拖进来，也不用重新生成数据包。 */
-async function reloadFromDataFolder() {
-  if (typeof window.showDirectoryPicker !== 'function') {
-    showToast('当前浏览器不支持选择文件夹，请用 Chrome / Edge 打开', true); return;
-  }
-  let h = await idbGetKey('fs-dir:data');
-  if (h) {
-    try {
-      let p = await h.queryPermission({ mode: 'read' });
-      if (p !== 'granted') p = await h.requestPermission({ mode: 'read' });
-      if (p !== 'granted') h = null;
-    } catch (e) { h = null; }
-  }
-  if (!h) {
-    showToast('请选择「HR看板」里的 data 文件夹');
-    try { h = await window.showDirectoryPicker({ id: 'fs-dir:data', mode: 'read', startIn: 'desktop' }); }
-    catch (e) { return; }
-    await idbSetKey('fs-dir:data', h);
-  }
-  const files = [];
-  try {
-    for await (const ent of h.values()) {
-      if (ent.kind !== 'file') continue;
-      if (!/\.(xlsx|xls)$/i.test(ent.name) || ent.name.startsWith('~$')) continue;
-      files.push(await ent.getFile());
-    }
-  } catch (e) { showToast('读取文件夹失败：' + (e.message || e), true); return; }
-  if (!files.length) { showToast('这个文件夹里没有 Excel 文件', true); return; }
-
-  /* 按文件名分类。同一类有多份时取「修改时间最新」的一份
-     —— 导出文件名带时间戳，拿错一份会静默读过时数据。 */
-  const newest = arr => arr.sort((a, b) => b.lastModified - a.lastModified)[0];
-  const cons       = newest(files.filter(f => /^HR看板数据源\.xlsx$/i.test(f.name)));
-  const kpa        = newest(files.filter(f => /^KPA.*\.xls$/i.test(f.name)));
-  const perfOrig   = newest(files.filter(f => /绩效考评结果汇总.*\.xlsx$/i.test(f.name)));
-  const ledgerOrig = newest(files.filter(f => /人才现状.*\.xlsx$/i.test(f.name)));
-  const legacyDs   = newest(files.filter(f => /^看板数据源\.xlsx$/i.test(f.name)));
-
-  /* 清空后整份重读：不清空的话，新导出里被删掉的人会永远留在看板上 */
-  const backup = { rawData, perfData, perfMeta, perfFileLoaded, ledgerData, ledgerSavedAt };
-  rawData = [];
-  perfData = {}; perfMeta = { count: 0, centers: [] }; perfFileLoaded = false;
-  ledgerData = null; ledgerSavedAt = null;
-  _dirListing = null;
-
-  const stats = { empFiles:0, perfFiles:0, perfCount:0, ledgerFiles:0, added:0, updated:0, failed:[] };
-  try {
-    /* ① 汇总表：台账 / 绩效 / 手工表 / 花名册 都从它来 */
-    if (cons) {
-      const wb = await readWorkbook(cons);
-      if (looksLikeConsolidated(wb)) await ingestConsolidated(wb, stats);
-      else stats.failed.push(cons.name);
-    }
-    /* ② 人员：**KPA 原文件优先**。汇总表里的「人员数据」是给 Excel 版看板用的副本，
-       原表更新鲜；ingestWorkbook 按工号覆盖合并，所以这里会盖掉副本里的同一人。
-       原文件不在时才只用副本。 */
-    if (kpa) {
-      stats.currentName = kpa.name;
-      await ingestWorkbook(await readWorkbook(kpa), stats);
-    }
-    /* ③ 没有汇总表时的兜底：按旧习惯分别认那几份原文件 */
-    if (!cons) {
-      if (perfOrig) { stats.currentName = perfOrig.name; await ingestWorkbook(await readWorkbook(perfOrig), stats); }
-      if (ledgerOrig) { stats.currentName = ledgerOrig.name; await ingestWorkbook(await readWorkbook(ledgerOrig), stats); }
-      if (legacyDs) {
-        const ds = parseDataSourceWorkbook(await readWorkbook(legacyDs));
-        ds.file = legacyDs.name;
-        adoptDataSource(ds, true);
-      }
-    }
-    /* 记下这次的数据来源，供「保存为数据包」写进 files、面板展示 */
-    if (!window.HR_DATA) window.HR_DATA = { v: 1, books: {} };
-    window.HR_DATA.files = Object.assign({}, window.HR_DATA.files, {
-      emp:    kpa ? kpa.name : (cons ? CONSOLIDATED_NAME + '（人员数据 sheet）' : undefined),
-      perf:   cons ? CONSOLIDATED_NAME + '（绩效 sheet）' : (perfOrig ? perfOrig.name : undefined),
-      ledger: cons ? CONSOLIDATED_NAME + '（台账 sheet）' : (ledgerOrig ? ledgerOrig.name : undefined),
-      manual: cons ? CONSOLIDATED_NAME : (legacyDs ? legacyDs.name : undefined),
-    });
-  } catch (e) { showToast('读取失败：' + (e.message || e), true); }
-
-  if (stats.perfCount > 0) attachPerfData();
-  if (!rawData.length && !perfMeta.count && !ledgerData) {
-    ({ rawData, perfData, perfMeta, perfFileLoaded, ledgerData, ledgerSavedAt } = backup);
-    attachPerfData(); refreshAll();
-    showToast('没从文件夹里认出任何数据文件，已保留原数据', true);
-  } else {
-    await onDataLoaded();
-    const bits = [];
-    if (rawData.length) bits.push('人员 ' + rawData.length + ' 条' + (stats.updated ? '（更新 ' + stats.updated + ' 条）' : ''));
-    if (stats.perfCount) bits.push('绩效 ' + stats.perfCount + ' 条');
-    if (stats.ledgerFiles) bits.push('台账 ' + ledgerBoardCount() + ' 块');
-    showToast('已从文件夹重新读取：' + bits.join(' · ')
-      + (cons ? '（数据来自 ' + CONSOLIDATED_NAME + '）' : ''));
-  }
-}
-
-/* ④ 数据维护面板 */
-function toggleDataPanel(force) {
-  const el = document.getElementById('dataPanel');
-  const ov = document.getElementById('dataPanelOverlay');
-  if (!el) return;
-  const show = (force === undefined) ? el.classList.contains('hidden') : !!force;
-  el.classList.toggle('hidden', !show);
-  if (ov) ov.classList.toggle('hidden', !show);   // 遮罩要和面板一起显隐，否则点外面关不掉
-  if (show) refreshDataPanel();
-}
-function refreshDataPanel() {
-  const el = document.getElementById('dataPanel');
-  if (!el) return;
-  const P = window.HR_DATA || {};
-  const g = groupCounts(rawData.filter(d => d.status === '在职'));
-  const roster = rosterIdsFromPack();
-  const rows = [
-    ['数据包生成时间', P.built ? fmtBuilt(P.built) + '（' + (P.scope === BU.scope ? '仅本部门' : '全量') + '）' : '未加载数据包'],
-    ['当前人员', rawData.length + ' 条 · 在职 ' + g.formal + ' 正式 / ' + g.intern + ' 实习 / ' + g.outsource + ' 外协'],
-    ['绩效', perfFileLoaded ? perfMeta.count + ' 人' : '未加载'],
-    ['台账', ledgerData ? ledgerBoardCount() + ' 块' : '未加载'],
-    ['手工数据源', dsData.loaded ? ('编制 ' + dsData.budget.length + ' · 目标 ' + Object.keys(dsData.targets).length + ' · 快照 ' + dsData.monthly.length + ' · 招聘 ' + dsData.recruitPlan.length) : '未加载'],
-    ['花名册', roster ? roster.size + ' 人（分享版按此名单裁）' : '未找到 / 空'],
-    ['来源文件', [P.files && P.files.emp, P.files && P.files.perf, P.files && P.files.ledger].filter(Boolean).join(' · ') || '—'],
-  ];
-  document.getElementById('dataPanelInfo').innerHTML = rows
-    .map(([k, v]) => `<div class="dp-row${k === '来源文件' ? ' stacked' : ''}"><span>${esc(k)}</span><b>${esc(String(v))}</b></div>`).join('');
-  const unsupported = typeof window.showDirectoryPicker !== 'function';
-  document.querySelectorAll('#dataPanel .dp-need-fs').forEach(b => {
-    b.disabled = unsupported;
-    b.title = unsupported ? '当前浏览器不支持直接写文件，请用 Chrome / Edge 打开' : '';
-  });
-  const btn = document.getElementById('dpSavePack');
-  if (btn) btn.disabled = unsupported || (!_packedBooks.emp && !_packedBooks.perf && !_packedBooks.ledger);
-  document.getElementById('dataPanelNote').textContent = unsupported
-    ? '当前浏览器不支持「直接读写文件」能力，涉及写文件的功能不可用（用 Chrome 或 Edge 打开即可）。拖 Excel 进页面的方式不受影响。'
-    : '日常你只需要维护 data/ 下那张汇总表（表名见 assets/bu-config.js 的 book；人员花名册基准是 data/ 的 KPA*.xls）：改完点最上面那条「从 data 文件夹读取最新数据」即可。'
-      + '（也可以直接拖 Excel 进页面，或把当前数据保存成数据包让改动长期生效）';
-}
-
-
 /* ── 兜底：从 data/ 目录自动加载 ──
    只在「用本地 http 服务打开」时走得到这条；双击打开走数据包，不需要它。
 
@@ -1105,7 +565,7 @@ async function fetchWorkbook(rel) {
    往往会删掉旧的，这时固定名就 404 了 —— 以前会静默变成「数据全空」。
    这里在固定名取不到时，退一步去读 data/ 的目录列表（本地 http 服务的
    目录索引会返回 HTML 列表），按模式匹配、取日期戳最新的那份。
-   分享版把 DATA_FILES 指到同目录 data/，所以目录前缀从配置里推导，不能写死。 */
+   目录前缀从配置里推导，不能写死。 */
 const DATA_DIR = (DATA_FILES.emp || '../data/x').replace(/[^/]*$/, '');
 let _dirListing = null;
 async function listDataDir() {
@@ -1188,11 +648,7 @@ async function autoLoadFromDataDir() {
   if (stats.perfCount > 0) attachPerfData();
   if (got) {
     await onDataLoaded();
-    const bits = [];
-    if (stats.empFiles) bits.push(`人员 ${rawData.length} 条`);
-    if (stats.perfCount) bits.push(`绩效 ${stats.perfCount} 条`);
-    if (stats.ledgerFiles) bits.push(`台账 ${ledgerData ? ledgerBoardCount() : 0} 块`);
-    showToast('已从 data/ 自动加载：' + bits.join(' · '));
+    /* 自动加载不打扰用户（黑底 toast 已按需求删除），加载结果看顶栏状态点 */
   }
   return got;
 }
@@ -1213,7 +669,7 @@ async function autoLoadFromDataDir() {
           数据包的 built 时间戳会变，此时旧快照作废，直接读新的
        ② 本地快照（IndexedDB）—— 「接着上次看到的地方」，也是拖入新数据后的暂存
        ③ 都没有：停在拖入界面，等用户拖 Excel 进来
-     点顶栏「重新加载」= 丢弃快照、回到数据包。 */
+     想让快照作废、回到数据包：重跑 更新数据.bat 换掉 built 时间戳，再刷新页面即可。 */
   restoreSnapshot().then(async snap => {
     const packBuilt = (window.HR_DATA && window.HR_DATA.built) || null;
     const snapStale = !!(snap && packBuilt && snap.packBuilt !== packBuilt);
@@ -1234,9 +690,7 @@ async function autoLoadFromDataDir() {
       rawData.forEach(d => { d.group = staffGroupOf(d); });
       attachPerfData();
       onDataLoaded(true);
-      showToast(window.HR_SHARED
-        ? `已恢复上次查看的数据（${snap.savedAt || '未知时间'}）`
-        : `已恢复上次的数据（${snap.savedAt || '未知时间'}）· 想回到数据包请点顶栏「数据维护」`);
+      /* 恢复快照静默完成，不再弹 toast（用户需求） */
       return;
     }
     /* 从数据包加载 —— 双击打开看板走的就是这条 */
@@ -1247,7 +701,7 @@ async function autoLoadFromDataDir() {
       /* 兜底：万一没有数据包，用本地 http 服务打开时还能从 data/ 直接读 */
       let got = false;
       try { got = await autoLoadFromDataDir(); } catch (e) { console.warn('data/ 自动加载失败：', e.message || e); }
-      if (!got) { loadDataSource(true); dsUpdateStatusUI(); }
+      if (!got) loadDataSource(true);
     }
   });
 })();

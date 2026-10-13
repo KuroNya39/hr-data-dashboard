@@ -15,7 +15,7 @@ const EMP_COLS = [
   { key:'mgmtLevel', label:'管理通道职等' }, { key:'talentPipeline', label:'梯队' },
   { key:'workLocation', label:'工作地点' }, { key:'orgType', label:'组织类型' },
   { key:'contractType', label:'合同类型' }, { key:'contractStart', label:'合同开始' }, { key:'contractEnd', label:'合同结束' },
-  { key:'joinDate', label:'入职日期' }, { key:'confirmDate', label:'转正日期' }, { key:'probationEnd', label:'试用届满' },
+  { key:'joinDate', label:'入职日期' }, { key:'confirmDate', label:'转正日期' },
   { key:'leaveDate', label:'离职日期' }, { key:'tenure', label:'司龄' },
   { key:'edu', label:'学历' }, { key:'school', label:'毕业学校' }, { key:'major', label:'主修专业' }, { key:'gradDate', label:'毕业时间' },
   { key:'industryYears', label:'行业年限' }, { key:'firstWorkDate', label:'首次工作' },
@@ -100,9 +100,9 @@ function renderEmployeeTable(sortByField) {
   // 预警筛选横幅
   const banner = document.getElementById('empAlertBanner');
   if (banner) banner.innerHTML = activeAlertTitle && typeof activeAlertFilter === 'function'
-    ? `<div style="display:flex;align-items:center;gap:10px;padding:7px 12px;background:var(--accent-soft);border-radius:var(--radius-sm);border-left:3px solid var(--accent);font-size:12px">` +
-      `<b>预警筛选：「${esc(activeAlertTitle)}」</b><span style="color:var(--ink-3)">共 ${rows.length} 人</span>` +
-      `<button class="link-btn" style="margin-left:auto" onclick="clearAlertFilter()"><span class="mi">close</span> 清除</button></div>` : '';
+    ? `<div class="emp-banner">` +
+      `<b>预警筛选：「${esc(activeAlertTitle)}」</b><span class="emp-banner-n">共 ${rows.length} 人</span>` +
+      `<button class="link-btn" onclick="clearAlertFilter()"><span class="mi">close</span> 清除</button></div>` : '';
 
   const total = rows.length;
   empTotalPages = Math.max(1, Math.ceil(total / empPageSize));
@@ -117,13 +117,17 @@ function renderEmployeeTable(sortByField) {
   const hint = document.getElementById('empFilterHint');
   const fc = Object.keys(columnFilters).filter(k => columnFilters[k]).length;
   hint.textContent = fc ? `${fc} 列已筛选` : '';
+  hint.classList.toggle('active', !!fc);
 
   const keys = EMP_COLS.map(c => c.key), labels = EMP_COLS.map(c => c.label);
   let html = '<table><thead><tr>' + labels.map((h, i) => {
     const k = keys[i];
+    /* 序号列不可筛（toggleFilterPopup 会直接 return）：不能给它指针光标、
+       不能给它 tabindex、也不能给它漏斗图标 —— 三样都是「点了有用」的假承诺（G3/G11）。 */
+    if (k === 'rowNum') return `<th data-nofilter>${esc(h)}</th>`;
     const arrow = empSortState.field === k ? `<span class="mi">${empSortState.asc ? 'arrow_upward' : 'arrow_downward'}</span>` : '';
     const icon = columnFilters[k] ? '<span class="mi">check</span>' : '';
-    return `<th onclick="toggleFilterPopup('${k}','${esc(h)}',this)" style="cursor:pointer;user-select:none">${esc(h)}${arrow}${icon}</th>`;
+    return `<th class="th-sort" tabindex="0" onclick="toggleFilterPopup('${k}','${esc(h)}',this)">${esc(h)}${arrow}${icon}</th>`;
   }).join('') + '</tr></thead><tbody>';
 
   pageRows.forEach((d, i) => {
@@ -145,7 +149,7 @@ function renderEmployeeTable(sortByField) {
       if (k === 'perfCoeff') return `<td>${d.perf && d.perf.inputCoeff ? d.perf.inputCoeff.toFixed(2) : '—'}</td>`;
       if (k === 'duty') {
         const v = (typeof dsData !== 'undefined' && dsData.dutyMap && dsData.dutyMap[d.id]) || '';
-        return `<td class="wrap" style="white-space:normal;min-width:160px;max-width:320px;line-height:1.5">${v ? esc(v) : '—'}</td>`;
+        return `<td class="wrap">${v ? esc(v) : '—'}</td>`;
       }
       const v = d[k];
       return `<td>${v != null && v !== '' ? esc(v) : '—'}</td>`;
@@ -154,13 +158,13 @@ function renderEmployeeTable(sortByField) {
   html += '</tbody></table>';
 
   // 分页控件（totalPages 用全局 empTotalPages，修复 v6 局部变量 bug）
-  html += '<div style="display:flex;align-items:center;gap:6px;justify-content:center;padding:8px 0;font-size:12px">';
-  html += `<button class="tb-btn" onclick="empGoToPage(1)">«</button><button class="tb-btn" onclick="empGoToPage(empPage-1)">‹</button>`;
-  html += `<select onchange="empGoToPage(parseInt(this.value))" style="padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink)">` +
+  html += '<div class="pg-bar">';
+  html += `<button class="tb-btn" onclick="empGoToPage(1)" aria-label="第一页"><span class="mi">first_page</span></button><button class="tb-btn" onclick="empGoToPage(empPage-1)" aria-label="上一页"><span class="mi">chevron_left</span></button>`;
+  html += `<select class="pg-select" aria-label="跳到第几页" onchange="empGoToPage(parseInt(this.value))">` +
     Array.from({length: empTotalPages}, (_, i) => `<option value="${i+1}"${i+1===empPage?' selected':''}>第 ${i+1} 页</option>`).join('') + '</select>';
-  html += `<button class="tb-btn" onclick="empGoToPage(empPage+1)">›</button><button class="tb-btn" onclick="empGoToPage(empTotalPages)">»</button>`;
-  html += `<span style="color:var(--ink-3)">每页</span><select onchange="empPageSize=parseInt(this.value);empPage=1;renderEmployeeTable()" style="padding:2px 6px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--ink)">` +
-    [50,100,200,500].map(s => `<option value="${s}"${s===empPageSize?' selected':''}>${s}</option>`).join('') + '</select><span style="color:var(--ink-3)">条</span></div>';
+  html += `<button class="tb-btn" onclick="empGoToPage(empPage+1)" aria-label="下一页"><span class="mi">chevron_right</span></button><button class="tb-btn" onclick="empGoToPage(empTotalPages)" aria-label="最后一页"><span class="mi">last_page</span></button>`;
+  html += `<span class="dim">每页</span><select class="pg-select" aria-label="每页显示条数" onchange="empPageSize=parseInt(this.value);empPage=1;renderEmployeeTable()">` +
+    [50,100,200,500].map(s => `<option value="${s}"${s===empPageSize?' selected':''}>${s}</option>`).join('') + '</select><span class="dim">条</span></div>';
 
   document.getElementById('empTableWrap').innerHTML = html;
 }
@@ -170,11 +174,13 @@ function empGoToPage(p) {
 }
 
 /* ── Excel 风格列筛选弹窗 ── */
+let fpLastTh = null;
 function toggleFilterPopup(colKey, colLabel, thEl) {
   const popup = document.getElementById('filterPopup');
   if (!popup) return;
   if (filterPopupCol === colKey && popup.style.display === 'block') { closeFilterPopup(); return; }
   if (colKey === 'rowNum') return;
+  fpLastTh = thEl || null;
 
   /* 候选值 = 其他列筛选 + 搜索框命中之后剩下的行。
      以前这里只做了列筛选、没管搜索框，于是会出现「表格里只剩几行、弹窗上却写着全选多少人」的矛盾。
@@ -192,43 +198,62 @@ function toggleFilterPopup(colKey, colLabel, thEl) {
   const selected = columnFilters[colKey] || new Set(entries.map(e => e.value));
   const allChecked = entries.length > 0 && selected.size === entries.length;
 
+  /* 值列表渲染走 core.js 共享实现：日期列自动分组 年→月→日，每行 hover「仅筛此项」 */
+  window.__fpOnChange = () => onFilterValChange(colKey);
+  window.__fpApplyOnly = set => { columnFilters[colKey] = set; renderEmployeeTable(); };
   popup.innerHTML =
-    `<div style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:12.5px;display:flex;justify-content:space-between;align-items:center"><span>${esc(colLabel)}</span><span onclick="closeFilterPopup()" style="cursor:pointer;opacity:.5"><span class="mi">close</span></span></div>` +
-    `<div style="border-bottom:1px solid var(--border)"><button onclick="sortEmployeeTable('${colKey}','asc')" style="display:block;width:100%;text-align:left;padding:4px 10px;border:none;background:none;font:inherit;font-size:12px;color:var(--ink)"><span class="mi">arrow_upward</span> 升序</button>` +
-    `<button onclick="sortEmployeeTable('${colKey}','desc')" style="display:block;width:100%;text-align:left;padding:4px 10px;border:none;background:none;font:inherit;font-size:12px;color:var(--ink)"><span class="mi">arrow_downward</span> 降序</button></div>` +
-    `<div style="max-height:240px;overflow-y:auto">` +
-    `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--gridline);font-size:12px;cursor:pointer"><input type="checkbox" class="cb-all"${allChecked?' checked':''} onchange="toggleAllFilterVals('${colKey}',this)"><b>全选</b><span style="margin-left:auto;color:var(--ink-3);font-size:11px">${total}</span></label>` +
-    entries.map(e => {
-      return `<label style="display:flex;align-items:center;gap:6px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap"><input type="checkbox" value="${esc(e.value)}"${selected.has(e.value)?' checked':''} onchange="onFilterValChange('${colKey}')"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(e.value)}</span><span style="color:var(--ink-3);font-size:11px">${e.count}</span></label>`;
-    }).join('') + '</div>' +
-    `<div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:flex-end">` +
+    fpHeaderHtml(colLabel, 'closeFilterPopup()') +
+    `<div class="fp-sort"><button class="fp-sort-btn" onclick="sortEmployeeTable('${colKey}','asc')"><span class="mi">arrow_upward</span> 升序</button>` +
+    `<button class="fp-sort-btn" onclick="sortEmployeeTable('${colKey}','desc')"><span class="mi">arrow_downward</span> 降序</button></div>` +
+    `<div class="fp-body">` +
+    `<label class="fp-row fp-all"><input type="checkbox" class="cb-all"${allChecked?' checked':''} onchange="toggleAllFilterVals('${colKey}',this)"><b>全选</b><span class="fp-count">${total}</span></label>` +
+    fpRenderList(entries, selected, `onFilterValChange('${colKey}')`) + '</div>' +
+    `<div class="fp-foot">` +
     `<button class="tb-btn" onclick="clearColumnFilter('${colKey}')">清除</button><button class="tb-btn primary" onclick="closeFilterPopup()">确定</button></div>`;
 
   popup.style.display = 'block';
   const rect = thEl.getBoundingClientRect();
-  popup.style.left = Math.min(rect.left, window.innerWidth - 320) + 'px';
-  popup.style.top = (rect.bottom + 2) + 'px';
+  fpPlacePopup(popup, rect, 320, 300);
+  /* 读屏可达 + 焦点进弹窗 */
+  fpOpenDialog(popup, colLabel);
   filterPopupCol = colKey;
 }
-function closeFilterPopup() { const p = document.getElementById('filterPopup'); if (p) p.style.display = 'none'; filterPopupCol = null; }
+function closeFilterPopup() {
+  const p = document.getElementById('filterPopup');
+  if (p && p.style.display === 'block') {
+    p.style.display = 'none';
+    fpFocus(fpLastTh);   // 焦点归还触发列头
+  }
+  fpLastTh = null; filterPopupCol = null;
+}
 function onFilterValChange(colKey) {
   const popup = document.getElementById('filterPopup');
   const selected = new Set();
-  popup.querySelectorAll('input[type="checkbox"]:not(.cb-all)').forEach(c => { if (c.checked) selected.add(c.value); });
+  /* 只认叶子（data-val）：分组节点 .cb-node 不带值，勾选状态由 fpSyncNodes 呈现 */
+  popup.querySelectorAll('input[type="checkbox"][data-val]').forEach(c => { if (c.checked) selected.add(c.dataset.val); });
   columnFilters[colKey] = selected;
   renderEmployeeTable();
 }
 function toggleAllFilterVals(colKey, cb) {
-  document.querySelectorAll('#filterPopup input[type="checkbox"]:not(.cb-all)').forEach(c => c.checked = cb.checked);
+  document.querySelectorAll('#filterPopup input[type="checkbox"][data-val]').forEach(c => c.checked = cb.checked);
   onFilterValChange(colKey);
+  fpSyncNodes();
 }
 function sortEmployeeTable(colKey, dir) { empSortState.field = colKey; empSortState.asc = dir === 'asc'; closeFilterPopup(); renderEmployeeTable(); }
 function clearColumnFilter(colKey) { delete columnFilters[colKey]; closeFilterPopup(); renderEmployeeTable(); }
 function clearAllColumnFilters() { columnFilters = {}; closeFilterPopup(); renderEmployeeTable(); }
+/* 点外部关闭：以「按下」位置为准（mousedown 与 click 同在弹窗外才关）——
+   修复「在弹窗内按下、拖到外面松开会误关」的边缘情况 */
+let fpPressOutside = false;
+document.addEventListener('mousedown', e => {
+  const popup = document.getElementById('filterPopup');
+  fpPressOutside = !!(popup && popup.style.display === 'block' && !popup.contains(e.target));
+}, true);
 document.addEventListener('click', e => {
   const popup = document.getElementById('filterPopup');
   if (!popup || popup.style.display !== 'block') return;
   if (popup.contains(e.target)) return;
+  if (!fpPressOutside) return;   // 按下发生在弹窗内：不算外部点击
   const th = e.target.closest && e.target.closest('th');
   if (th && th.closest('table') && th.closest('#empTableWrap')) return;
   closeFilterPopup();
@@ -238,16 +263,7 @@ document.addEventListener('click', e => {
 function exportEmployeeTable() {
   const rows = getEmployeeRows();
   const keys = EMP_COLS.map(c => c.key), labels = EMP_COLS.map(c => c.label);
-  const csv = ['\ufeff' + labels.join(',')].concat(rows.map((d, idx) => keys.map(k => {
-    // 取数一律走 empColValue，导出的字面就和表格里看到的一致
-    const v = k === 'rowNum' ? idx + 1 : empColValue(d, k);
-    const s = String(v ?? '');
-    return (s.includes(',') || s.includes('"') || s.includes('\n')) ? '"' + s.replace(/"/g, '""') + '"' : s;
-  }).join(','))).join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type:'text/csv;charset=utf-8;' }));
-  a.download = `员工明细_${new Date().toISOString().slice(0,10)}.csv`;
-  a.click();
-  URL.revokeObjectURL(a.href);
+  const csv = csvText(labels, rows.map((d, idx) => keys.map(k => k === 'rowNum' ? idx + 1 : empColValue(d, k))));
+  downloadCsv('员工明细', csv);
   showToast(`已导出 ${rows.length} 条（与当前表格一致）`);
 }

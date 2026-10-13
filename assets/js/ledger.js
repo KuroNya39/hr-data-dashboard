@@ -33,7 +33,7 @@ function cellAt(row, idx) { return (idx >= 0 && row && row[idx] !== undefined) ?
 /* ── 主入口 ── */
 function parseLedgerWorkbook(wb) {
   const out = {
-    summary: null, bcPeople: [], campus27: [], outsource: { active: [], left: [], notes: [] },
+    summary: null, bcPeople: [], campus27: [], campus26: [], outsource: { active: [], left: [], notes: [] },
     onboard: [], recruitOpen: [], reserveCandidates: [], highPotential: [], deptTier: [],
     sheets: wb.SheetNames.slice(),
   };
@@ -48,7 +48,9 @@ function parseLedgerWorkbook(wb) {
       if (key.includes('组织架构')) out.summary = parseLedgerSummary(rows, out.summary);
       else if (key.includes('B-C') || key.includes('BC人员') || key.includes('人员情况')) out.bcPeople = parseBC(rows);
       else if (key.includes('校招需求')) out.campus27 = parseCampus27(rows);
+      else if (key.includes('校招名单')) out.campus26 = parseCampus26(rows);
       else if (key.includes('外包名单') || key.includes('外包评价')) out.outsource = parseOutsource(rows);
+      else if (key.includes('OD名单')) out.outsource = parseOD(rows);
       else if (key.includes('入职名单')) out.onboard = parseOnboard(rows);
       else if (key.includes('招聘未达成') || key.includes('未达成需求')) out.recruitOpen = parseRecruitOpen(rows);
       else if (key.includes('储备干部')) out.reserveCandidates = parseReserve(rows);
@@ -120,13 +122,18 @@ function parseBC(rows) {
   for (let r = hi + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row || !lv(cellAt(row, i.name))) continue;
+    const grades = [lv(cellAt(row, i.h2023H2)), lv(cellAt(row, i.h2024H1)), lv(cellAt(row, i.h2024H2)),
+                    lv(cellAt(row, i.h2025H1)), lv(cellAt(row, i.h2025H2)), lv(cellAt(row, i.h2026H1))];
+    const progress = lv(cellAt(row, i.progress));
     out.push({
       id: lv(cellAt(row, i.id)), name: lv(cellAt(row, i.name)), dept: lv(cellAt(row, i.dept)),
       level: lv(cellAt(row, i.level)), sub: lv(cellAt(row, i.sub)),
-      grades: [lv(cellAt(row, i.h2023H2)), lv(cellAt(row, i.h2024H1)), lv(cellAt(row, i.h2024H2)),
-               lv(cellAt(row, i.h2025H1)), lv(cellAt(row, i.h2025H2)), lv(cellAt(row, i.h2026H1))],
+      grades,
       plan: lv(cellAt(row, i.plan)), conclusion: lv(cellAt(row, i.conclusion)),
-      replaceDir: lv(cellAt(row, i.replaceDir)), progress: lv(cellAt(row, i.progress)),
+      replaceDir: lv(cellAt(row, i.replaceDir)), progress,
+      /* 在册跟踪判定：进展列写了「已离职/已优化」，或最新一期评级列直接写着「已离职」。
+         取 grades 末位而不是写死下标——将来加一期绩效列不用回来改这里 */
+      left: /已离职|已优化/.test(progress) || grades[grades.length - 1] === '已离职',
     });
   }
   return out;
@@ -143,6 +150,14 @@ function parseCampus27(rows) {
     edu: findCol(H, '学历要求'), reason: findCol(H, '配置原因'), location: findCol(H, '地域'),
     owner: findCol(H, '岗位负责人'), note: findCol(H, '备注'),
   };
+  /* 需求分布 S/A/B+：主表头行上是合并单元格「需求分布」，三个等级名在下一行的子表头。
+     语义（用户拍板）：面试评价定级，数字=该岗位要招「这个等级」的人数，每行只在其中一列有值 */
+  let iGrade = { S: -1, 'A': -1, 'B+': -1 };
+  for (let r = hi + 1; r <= Math.min(hi + 2, rows.length - 1); r++) {
+    const sub = (rows[r] || []).map(c => lv(c).trim());
+    const p = sub.indexOf('S');
+    if (p >= 0 && sub[p + 1] === 'A' && sub[p + 2] === 'B+') { iGrade = { S: p, 'A': p + 1, 'B+': p + 2 }; break; }
+  }
   const out = [];
   for (let r = hi + 2; r < rows.length; r++) {
     const row = rows[r];
@@ -150,11 +165,68 @@ function parseCampus27(rows) {
     const n = lnum(cellAt(row, i.count));
     // 跳过「合计」行（部门与岗位均为空，只有汇总数字）
     if (!n || !lv(cellAt(row, i.dept))) continue;
+    let gradeStr = '';
+    const grades = [];
+    for (const g of ['S', 'A', 'B+']) {
+      const v = iGrade[g] >= 0 ? lnum(cellAt(row, iGrade[g])) : 0;
+      if (v) grades.push({ g, n: v });
+    }
+    /* 一行可跨等级（实测 SW2：A 1 人 + B+ 1 人），grades 存结构化数组，gradeStr 供展示 */
+    if (grades.length) gradeStr = grades.map(x => x.g + '×' + x.n).join(' + ');
     out.push({
       dept: lv(cellAt(row, i.dept)), position: lv(cellAt(row, i.position)), jobType: lv(cellAt(row, i.jobType)),
       direction: lv(cellAt(row, i.direction)), detail: lv(cellAt(row, i.detail)), count: n,
+      grades, gradeStr,
       edu: lv(cellAt(row, i.edu)), reason: lv(cellAt(row, i.reason)), location: lv(cellAt(row, i.location)),
       owner: lv(cellAt(row, i.owner)), note: lv(cellAt(row, i.note)),
+    });
+  }
+  return out;
+}
+
+/* ── ③b 26届校招名单（签约 → 入职 → 月度评价跟踪）──
+   固定字段照表头抓取；月度评价列按表头模式「导师X月评价 / 主管X月评价」动态抓取，
+   不依赖列序 —— 用户以后加 9月/10月… 列，重出数据包即自动进看板。
+   口径（用户拍板 2026-10-12）：名单里的人都是确认已入职的，不设状态列。 */
+function parseCampus26(rows) {
+  const hi = findHeaderRow(rows, ['候选人名称', '部门'], 5);
+  if (hi < 0) return [];
+  const H = rows[hi].map(c => lv(c));
+  const months = [];                       // [{m, mentor:col, lead:col}] 按月升序
+  H.forEach((h, idx) => {
+    const m = String(h).match(/^(导师|主管)(\d+)月评价$/);
+    if (!m) return;
+    let slot = months.find(x => x.m === +m[2]);
+    if (!slot) { slot = { m: +m[2], mentor: -1, lead: -1 }; months.push(slot); }
+    slot[m[1] === '导师' ? 'mentor' : 'lead'] = idx;
+  });
+  months.sort((a, b) => a.m - b.m);
+  const i = {
+    no: findCol(H, '序号'), dept: findCol(H, '部门'), name: findCol(H, '候选人名称'),
+    mentor: findCol(H, '导师安排'), lead: findCol(H, '上级主管'), position: findCol(H, '岗位名称'),
+    category: findCol(H, '分类'), intern: findCol(H, '实习'), gender: findCol(H, '性别'),
+    edu: findCol(H, '学历'), school: findCol(H, '最高学历学校'), tier: findCol(H, '毕业院校类别'),
+    major: findCol(H, '毕业专业'), grade: findCol(H, '最终评级'), location: findCol(H, 'offer地点'),
+    signed: findCol(H, '是否签约'), contract: findCol(H, '签约二方'), note: findCol(H, '备注'),
+  };
+  const out = [];
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || !lv(cellAt(row, i.name))) continue;
+    const evals = months.map(s => ({
+      m: s.m,
+      mentor: s.mentor >= 0 ? lv(cellAt(row, s.mentor)) : '',
+      lead: s.lead >= 0 ? lv(cellAt(row, s.lead)) : '',
+    })).filter(e => e.mentor || e.lead);
+    out.push({
+      no: lv(cellAt(row, i.no)), dept: lv(cellAt(row, i.dept)), name: lv(cellAt(row, i.name)),
+      mentor: lv(cellAt(row, i.mentor)), lead: lv(cellAt(row, i.lead)), position: lv(cellAt(row, i.position)),
+      /* category（分类）/ contract（签约二方）当前无消费方，随行保留供后续校招视图用 */
+      category: lv(cellAt(row, i.category)), intern: lv(cellAt(row, i.intern)),
+      gender: lv(cellAt(row, i.gender)), edu: lv(cellAt(row, i.edu)), school: lv(cellAt(row, i.school)),
+      tier: lv(cellAt(row, i.tier)), major: lv(cellAt(row, i.major)), grade: lv(cellAt(row, i.grade)),
+      location: lv(cellAt(row, i.location)), signed: lv(cellAt(row, i.signed)),
+      contract: lv(cellAt(row, i.contract)), note: lv(cellAt(row, i.note)), evals,
     });
   }
   return out;
@@ -174,6 +246,37 @@ function parseOutsource(rows) {
     if (/当前在岗|整体表现|不达预期将置换|已离岗/.test(c0)) { res.notes.push(c0); continue; }
     const item = { name: c0, dept: lv(cellAt(row, 1)), joinDate: ldate(cellAt(row, 2)), status: lv(cellAt(row, 3)) };
     (mode === 'active' ? res.active : res.left).push(item);
+  }
+  return res;
+}
+
+/* ── ⑧ OD 名单（=外包用工，用户确认 2026-10-12）──
+   单表结构：员工状态 在职/已离职 → outsource.active/left，老消费方零改动；
+   额外保留 岗位/地点/主管/月薪/评价 供外包管理页后续消费 */
+function parseOD(rows) {
+  const empty = { active: [], left: [], notes: [] };
+  const hi = findHeaderRow(rows, ['员工姓名', '员工状态'], 5);
+  if (hi < 0) return empty;
+  const H = rows[hi].map(c => lv(c));
+  const i = {
+    id: findCol(H, '员工编号'), name: findCol(H, '员工姓名'), dept: findCol(H, '二级部门'),
+    status: findCol(H, '员工状态'), joinDate: findCol(H, '入职日期'), leaveDate: findCol(H, '离职日期'),
+    level: findCol(H, '职等'), sub: findCol(H, '子等级'), position: findCol(H, '岗位'), site: findCol(H, '工作地点'),
+    lead: findCol(H, '上级主管'), monthly: findCol(H, '月薪'), cost: findCol(H, '内部人力成本'), evalCol: findCol(H, '部门评价'),
+  };
+  const res = { active: [], left: [], notes: [] };
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || !lv(cellAt(row, i.name))) continue;
+    const item = {
+      id: lv(cellAt(row, i.id)), name: lv(cellAt(row, i.name)), dept: lv(cellAt(row, i.dept)),
+      status: lv(cellAt(row, i.status)), joinDate: ldate(cellAt(row, i.joinDate)), leaveDate: ldate(cellAt(row, i.leaveDate)),
+      level: lv(cellAt(row, i.level)), sub: lv(cellAt(row, i.sub)), position: lv(cellAt(row, i.position)),
+      site: lv(cellAt(row, i.site)), lead: lv(cellAt(row, i.lead)),
+      monthly: i.monthly >= 0 ? lnum(cellAt(row, i.monthly)) : 0, cost: i.cost >= 0 ? lnum(cellAt(row, i.cost)) : 0,
+      evalText: i.evalCol >= 0 ? lv(cellAt(row, i.evalCol)) : '',
+    };
+    (item.status === '已离职' ? res.left : res.active).push(item);
   }
   return res;
 }
@@ -201,7 +304,32 @@ function parseOnboard(rows) {
   return out;
 }
 
-/* ── ⑥ 招聘未达成需求 ── */
+/* ── ⑥ 招聘未达成需求 ──
+   两套口径在解析层出结论（渠道三分 / 原因五桶，见 CLAUDE.md），
+   渲染端只读 channelClass / reasonClass，不再各自去正则自由文本。
+   原因桶的顺序即图例顺序；re 为 null 的是兜底桶。 */
+const RECRUIT_REASONS = [
+  { name: '离职替补', re: /离职(替补|补员)/ },
+  { name: '人力缺口', re: /人力缺口/ },
+  { name: '新增需求', re: /新增/ },
+  { name: '技术攻坚', re: /高手|竞争力|高T|技术瓶颈|架构/ },
+  { name: '其他 / 未注明', re: null },
+];
+function recruitReasonClass(reason) {
+  const s = String(reason || '');
+  const hit = RECRUIT_REASONS.find(b => b.re && b.re.test(s));
+  return hit ? hit.name : RECRUIT_REASONS[RECRUIT_REASONS.length - 1].name;
+}
+/* 渠道三分：外聘正式工 / 人力外协 / 双渠道（两种都写的行） */
+function recruitChannelClass(channel) {
+  const s = String(channel || '');
+  const f = s.includes('正式工');
+  const o = s.includes('外包') || s.includes('外协') || s.includes('劳务');
+  if (f && o) return 'dual';
+  if (f) return 'formal';
+  if (o) return 'out';
+  return 'other';
+}
 function parseRecruitOpen(rows) {
   const hi = findHeaderRow(rows, ['部门', '岗位名称'], 8);
   if (hi < 0) return [];
@@ -209,19 +337,25 @@ function parseRecruitOpen(rows) {
   const i = {
     center: findCol(H, '中心'), dept: findCol(H, '部门'), position: findCol(H, '岗位名称'),
     direction: findCol(H, '技术方向'), count: findCol(H, '需求人数'), reason: findCol(H, '原因说明'),
-    project: findCol(H, '影响项目'), channel: findCol(H, '招聘渠道'),
+    project: findCol(H, '影响项目'), channel: findCol(H, '招聘渠道'), remark: findCol(H, '备注'),
   };
   const out = [];
   for (let r = hi + 1; r < rows.length; r++) {
     const row = rows[r];
     if (!row) continue;
     const n = lnum(cellAt(row, i.count));
-    // 跳过「合计」行（部门为空，只有汇总人数）
-    if (!n || !lv(cellAt(row, i.dept))) continue;
+    const remark = lv(cellAt(row, i.remark));
+    const reason = lv(cellAt(row, i.reason));
+    const channel = lv(cellAt(row, i.channel));
+    // 跳过「合计」行（部门为空，只有汇总人数）；需求人数为 0 的行保留——备注列可能标了「已入职」
+    if (!lv(cellAt(row, i.dept))) continue;
     out.push({
       center: lv(cellAt(row, i.center)), dept: lv(cellAt(row, i.dept)), position: lv(cellAt(row, i.position)),
-      direction: lv(cellAt(row, i.direction)), count: n, reason: lv(cellAt(row, i.reason)),
-      project: lv(cellAt(row, i.project)), channel: lv(cellAt(row, i.channel)),
+      direction: lv(cellAt(row, i.direction)), count: n, reason, reasonClass: recruitReasonClass(reason),
+      project: lv(cellAt(row, i.project)), channel, channelClass: recruitChannelClass(channel), remark,
+      /* 达成判定只认「备注」列：备注写了「已入职（姓名）」= 该需求已达成。
+         判定放在解析层，渲染端读这个布尔值，不再各自去正则自由文本 */
+      joined: /已入职/.test(remark),
     });
   }
   return out;
