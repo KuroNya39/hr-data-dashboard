@@ -29,7 +29,9 @@
   let gridCur = null;             // 筛选弹窗上下文 { table, ci, key }
   let scanQueued = false;
 
-  /* 多选模式：{ table, kind:'row'|'col', rows:Set(tr), cols:Set(ci) } */
+  /* 多选模式：{ table, kind:'row'|'col', keys:Set(行key), cols:Set(ci), tk:表标识 }
+     2026-10-13 重构：选中按「行身份 key」存（整行文本+同文序号），翻页/重渲染后自动恢复；
+     员工表分页是整表重建（旧表被替换），靠 tk 匹配重绑新表 */
   let selMode = null;
   /* 悬浮工具条当前绑定的表 */
   let barTable = null, barHideTimer = null;
@@ -63,6 +65,7 @@
     const thead = table.querySelector('thead');
     if (!thead || !thead.rows.length) return;
     const isEmp = !!table.closest('.emp-table-wrap');
+    rebindIfReplaced(table);   // 分页整表重建后接续多选状态
 
     if (thead.dataset.gridReady) {
       /* 重复扫描：结构没变就跳过全量重刷（mutation 频繁时不抖） */
@@ -78,18 +81,25 @@
       th.dataset.gridTh = '1';
       const label = th.textContent.trim();
       if (!label) return;                       // 空表头列不给筛
+      /* 该列声明了自己不可筛（员工明细的「序号」）→ 不给任何「点了有用」的信号：
+         不加 .grid-th（指针光标）、不加 tabindex（键盘能聚焦却按不动 = 焦点陷阱）、不加漏斗 */
+      if (th.hasAttribute('data-nofilter')) return;
       th.classList.add('grid-th');
+      th.tabIndex = 0;   // 列头可聚焦：键盘可达 + 关弹窗后焦点有处可归
       const funnel = document.createElement('span');
       funnel.className = 'mi grid-funnel';
       funnel.style.pointerEvents = 'none';      // 别拦住 th 自己的点击
       funnel.textContent = 'filter_list';
       th.appendChild(funnel);
 
+      /* 读屏名而不是原生 title：title 会弹系统气泡、且不算可访问名（G11）。
+         「右键冻结/隐藏」不是唯一入口 —— 弹窗底部本来就有这两个按钮，所以这里降级为读屏提示。 */
+      const hint = '点击筛选「' + label + '」· 右键冻结 / 隐藏';
       if (isEmp) {
         /* 员工明细：点击仍走 table.js 自己的 toggleFilterPopup（th 上有内联 onclick） */
-        th.title = '点击筛选「' + label + '」· 右键冻结 / 隐藏';
+        th.setAttribute('aria-label', hint);
       } else {
-        th.title = '点击筛选「' + label + '」· 右键冻结 / 隐藏';
+        th.setAttribute('aria-label', hint);
         th.addEventListener('click', e => {
           e.stopPropagation();
           if (selMode && selMode.table === table && selMode.kind === 'col') { toggleColSel(table, ci); return; }
@@ -98,18 +108,42 @@
       }
       th.addEventListener('contextmenu', e => {
         e.preventDefault(); e.stopPropagation();
-        openHeadMenu(table, ci, th, label);
+        openHeadMenu(table, ci, th, label, e);
       });
     });
 
     const tbody = table.querySelector('tbody');
     if (tbody && !tbody.dataset.gridRows) {
       tbody.dataset.gridRows = '1';
+      tbody.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        const tr = e.target.closest('tr');
+        if (!tr || e.target.closest('.grid-cbx, .grid-cbx-all')) return;
+        const active = selMode && selMode.table === table && selMode.kind === 'row';
+        if (!active || e.ctrlKey || e.metaKey) return;   // 非模式/Ctrl 加选走 click
+        e.preventDefault();                              // 拖拽期间禁止选中文本
+        const idx = allRowsOf(table).indexOf(tr);
+        if (idx < 0) return;
+        dragSel = { table, anchor: idx, last: idx };
+        selRange(table, idx, idx);
+      });
+      tbody.addEventListener('mouseover', e => {
+        if (!dragSel || dragSel.table !== table) return;
+        const tr = e.target.closest('tr');
+        if (!tr) return;
+        const idx = allRowsOf(table).indexOf(tr);
+        if (idx < 0 || idx === dragSel.last) return;
+        dragSel.last = idx;
+        selRange(table, dragSel.anchor, idx);            // Excel 式：拖到哪选到哪（区间替换）
+      });
       tbody.addEventListener('click', e => {
         const tr = e.target.closest('tr');
         if (!tr) return;
-        if (selMode && selMode.table === table && selMode.kind === 'row') {
-          e.stopPropagation(); toggleRowSel(table, tr); return;
+        const active = selMode && selMode.table === table && selMode.kind === 'row';
+        if (active) {
+          e.stopPropagation();
+          if (e.ctrlKey || e.metaKey) toggleRowSel(table, tr);  // Ctrl=加/减选；普通点击已由 mousedown 按区间处理
+          return;
         }
         if (e.ctrlKey || e.metaKey) {           // 任何时刻 Ctrl+点行 = 临时多选
           e.preventDefault(); toggleRowSel(table, tr);
@@ -119,7 +153,7 @@
         const tr = e.target.closest('tr');
         if (!tr) return;
         e.preventDefault(); e.stopPropagation();
-        openRowMenu(table, tr);
+        openRowMenu(table, tr, e);
       });
     }
     applyAll(table);
@@ -129,8 +163,10 @@
   function applyAll(table) {
     applyHiddenCols(table);
     applyGridFilter(table);       // 行筛选与隐藏行合并处理
+    if (selMode && selMode.table === table && selMode.kind === 'row') mountCheckboxes(table); // 先挂勾选框再测冻结宽度
     applyFreeze(table);
     refreshFunnel(table);
+    if (selMode && selMode.table === table) applySelVisual(table);  // 重渲染后恢复选中高亮
   }
 
   function applyHiddenCols(table) {
@@ -154,8 +190,9 @@
       if (set && set.size) byCol.set(ci, set);
     });
     const hide = hiddenRows.get(tk(table));
+    const keys = hide && hide.size ? rowKeys(table) : null;   // 2026-10-13：隐藏行按行身份存
     [...tbody.rows].forEach((row, ri) => {
-      let show = !(hide && hide.has(ri));
+      let show = !(keys && hide.has(keys[ri]));
       if (show && byCol.size) {
         for (const [ci, set] of byCol) {
           const v = cellText(row, ci);
@@ -256,14 +293,17 @@
       bodyRows.forEach(tr => { if (tr.style.display !== 'none') markCol(tr, 2); });
     }
 
-    /* ② 行冻结：表头从基准 top 起浮点累加；冻结行接在表头之后 */
+    /* ② 行冻结：表头从基准 top 起浮点累加；冻结行接在表头之后
+       ⚠ z 层级：冻结列的表头(5) > 普通表头(4) > 正文冻结格(2)——
+       2026-10-13 修复：此前所有表头统一 z=5，横向滚动时未冻结表头
+       （DOM 靠后）盖住冻结列表头，视觉上=「冻结列时表头没有冻结」 */
     let top = base;
     headRows.forEach(tr => {
       [...tr.cells].forEach(c => {
         if (c.style.display === 'none') return;
         c.style.position = 'sticky';
         c.style.top = top + 'px';
-        c.style.zIndex = st.fc ? 5 : 3;
+        c.style.zIndex = st.fc ? (c.classList.contains('grid-frozen-col') ? 5 : 4) : 3;
         c.classList.add('grid-frozen-cell', 'grid-frozen-row');
         if (st.fc) c.classList.add('grid-frozen-corner');
       });
@@ -316,28 +356,31 @@
     const selected = colFilters.get(key) || new Set(entries.map(e => e.value));
     const allChecked = entries.length > 0 && selected.size === entries.length;
 
-    gridCur = { table, ci, key };
+    gridCur = { table, ci, key, th };
+    /* 值列表渲染走 core.js 共享实现：日期列自动分组 年→月→日，每行 hover「仅筛此项」 */
+    window.__fpOnChange = () => gridOnValChange();
+    window.__fpApplyOnly = set => { colFilters.set(key, set); applyGridFilter(table); refreshFunnel(table); };
     popup.innerHTML =
-      `<div style="padding:6px 10px;border-bottom:1px solid var(--border);font-weight:600;font-size:12.5px;display:flex;justify-content:space-between;align-items:center"><span>${esc(label)}</span><span onclick="gridClosePopup()" style="cursor:pointer;opacity:.5"><span class="mi">close</span></span></div>` +
-      `<div style="max-height:260px;overflow-y:auto">` +
-      `<label style="display:flex;align-items:center;gap:6px;padding:4px 10px;border-bottom:1px solid var(--gridline);font-size:12px;cursor:pointer"><input type="checkbox" class="cb-all"${allChecked ? ' checked' : ''} onchange="gridToggleAll(this)"><b>全选</b><span style="margin-left:auto;color:var(--ink-3);font-size:11px">${total}</span></label>` +
-      entries.map(e =>
-        `<label style="display:flex;align-items:center;gap:6px;padding:3px 10px;cursor:pointer;font-size:12px;white-space:nowrap"><input type="checkbox" value="${esc(e.value)}"${selected.has(e.value) ? ' checked' : ''} onchange="gridOnValChange()"><span style="flex:1;overflow:hidden;text-overflow:ellipsis">${esc(e.value)}</span><span style="color:var(--ink-3);font-size:11px">${e.count}</span></label>`
-      ).join('') + '</div>' +
-      `<div style="padding:6px 10px;border-top:1px solid var(--border);display:flex;gap:6px;justify-content:space-between;align-items:center">` +
-      `<span><button class="tb-btn" onclick="gridFreezeCol()" title="冻结表头到此列（含以左全部冻结）">冻结到此列</button> <button class="tb-btn" onclick="gridHideCol()">隐藏本列</button></span>` +
+      fpHeaderHtml(label, 'gridClosePopup()') +
+      `<div class="fp-body">` +
+      `<label class="fp-row fp-all"><input type="checkbox" class="cb-all"${allChecked ? ' checked' : ''} onchange="gridToggleAll(this)"><b>全选</b><span class="fp-count">${total}</span></label>` +
+      fpRenderList(entries, selected, 'gridOnValChange()') + '</div>' +
+      `<div class="fp-foot split">` +
+      `<span><button class="tb-btn" onclick="gridFreezeCol()" aria-label="冻结表头到此列（含以左全部冻结）">冻结到此列</button> <button class="tb-btn" onclick="gridHideCol()">隐藏本列</button></span>` +
       `<span><button class="tb-btn" onclick="gridClearColumn()">清除</button> <button class="tb-btn primary" onclick="gridClosePopup()">确定</button></span></div>`;
 
     popup.style.display = 'block';
     const rect = th.getBoundingClientRect();
-    popup.style.left = Math.max(6, Math.min(rect.left, window.innerWidth - 340)) + 'px';
-    popup.style.top = Math.min(rect.bottom + 2, window.innerHeight - 240) + 'px';
+    fpPlacePopup(popup, rect, 340, 240);
+    /* 读屏可达 + 焦点进弹窗（与 table.js 员工明细弹窗同一套规范） */
+    fpOpenDialog(popup, label);
   }
 
   function collectChecked() {
     const selected = new Set();
-    document.querySelectorAll('#filterPopup input[type="checkbox"]:not(.cb-all)')
-      .forEach(c => { if (c.checked) selected.add(c.value); });
+    /* 只认叶子（data-val）：日期分组节点 .cb-node 不带值 */
+    document.querySelectorAll('#filterPopup input[type="checkbox"][data-val]')
+      .forEach(c => { if (c.checked) selected.add(c.dataset.val); });
     return selected;
   }
   window.gridOnValChange = function () {
@@ -349,9 +392,10 @@
     refreshFunnel(gridCur.table);
   };
   window.gridToggleAll = function (cb) {
-    document.querySelectorAll('#filterPopup input[type="checkbox"]:not(.cb-all)')
+    document.querySelectorAll('#filterPopup input[type="checkbox"][data-val]')
       .forEach(c => { c.checked = cb.checked; });
     gridOnValChange();
+    fpSyncNodes();
   };
   window.gridClearColumn = function () {
     if (gridCur) { colFilters.delete(gridCur.key); applyGridFilter(gridCur.table); }
@@ -359,7 +403,10 @@
   };
   window.gridClosePopup = function () {
     const p = document.getElementById('filterPopup');
-    if (p) p.style.display = 'none';
+    if (p && p.style.display === 'block') {
+      p.style.display = 'none';
+      fpFocus(gridCur && gridCur.th);   // 焦点归还触发列头
+    }
     gridCur = null;
   };
   window.gridFreezeCol = function () {
@@ -389,12 +436,107 @@
     if (barTable === table) showBar();
   }
 
+  /* ═══════════ 行身份与选中恢复（2026-10-13）═══════════
+     行 key = 整行文本 + 同文本第几次出现——跨分页/重渲染稳定，
+     序号列（页内递增）不会污染 key。员工表首列是页内序号，故不能用首格。 */
+  function rowKeys(table) {
+    const counts = new Map();
+    return allRowsOf(table).map(tr => {
+      const txt = tr.textContent;
+      const n = counts.get(txt) || 0;
+      counts.set(txt, n + 1);
+      return txt + '#' + n;
+    });
+  }
+  function rowKeyAt(table, ri) { return rowKeys(table)[ri]; }
+
+  /* 勾选框：塞进每行第一个可见格（不动列结构，ci 体系不受影响） */
+  function mountCheckboxes(table) {
+    const keys = rowKeys(table);
+    const tbody = table.tBodies[0];
+    if (!tbody) return;
+    const headTh = table.tHead && table.tHead.rows[0].cells[0];
+    if (headTh && !headTh.querySelector('.grid-cbx-all')) {
+      const all = document.createElement('input');
+      all.type = 'checkbox'; all.className = 'grid-cbx-all';
+      all.setAttribute('aria-label', '全选本页可见行');
+      all.addEventListener('click', e => e.stopPropagation());
+      all.addEventListener('change', () => {
+        const keysNow = rowKeys(table);
+        allRowsOf(table).forEach((tr, i) => {
+          if (tr.style.display === 'none') return;
+          if (all.checked) selMode.keys.add(keysNow[i]);
+          else selMode.keys.delete(keysNow[i]);
+        });
+        applySelVisual(table); showBar();
+      });
+      headTh.insertBefore(all, headTh.firstChild);
+    }
+    allRowsOf(table).forEach((tr, i) => {
+      const td = [...tr.cells].find(c => c.style.display !== 'none');
+      if (!td || td.querySelector('.grid-cbx')) return;
+      const cb = document.createElement('input');
+      cb.type = 'checkbox'; cb.className = 'grid-cbx';
+      cb.checked = selMode.keys.has(keys[i]);
+      cb.addEventListener('click', e => e.stopPropagation());
+      cb.addEventListener('change', () => toggleRowKey(table, keys[i], cb.checked));
+      td.insertBefore(cb, td.firstChild);
+    });
+  }
+  function unmountCheckboxes(table) {
+    table.querySelectorAll('.grid-cbx, .grid-cbx-all').forEach(el => el.remove());
+  }
+  /* 按 key 选中/取消一行，并同步视觉与勾选框 */
+  function toggleRowKey(table, key, on) {
+    if (on === undefined) on = !selMode.keys.has(key);
+    if (on) selMode.keys.add(key); else selMode.keys.delete(key);
+    applySelVisual(table); showBar();
+  }
+  /* Excel 式拖拽：区间替换选中（含锚点行..当前行） */
+  let dragSel = null;
+  function selRange(table, a, b) {
+    if (!selMode || selMode.table !== table) return;
+    const keys = rowKeys(table);
+    const lo = Math.min(a, b), hi = Math.max(a, b);
+    selMode.keys = new Set(keys.slice(lo, hi + 1));
+    applySelVisual(table); showBar();
+  }
+  document.addEventListener('mouseup', () => { dragSel = null; });
+  /* 重渲染后由 applyAll 调用：勾选框重挂 + 高亮恢复 */
+  function applySelVisual(table) {
+    if (!selMode || selMode.table !== table) return;
+    if (selMode.kind === 'row') {
+      const keys = rowKeys(table);
+      /* 一遍过：高亮 / 勾选框 / 可见计数 / 已选可见计数一起算。
+         原先第二遍写成 vis.filter(... allRowsOf(table).indexOf(tr) ...)，每行都把整表重算一遍 key
+         （rowKeys 要对每行做全行 textContent 拼接），是 O(行²) 次文本读取；
+         员工明细每页可到 500 行，而拖拽框选的每个 mouseover 都会调到这里 —— 明细页卡顿的源。 */
+      let visN = 0, selVis = 0;
+      allRowsOf(table).forEach((tr, i) => {
+        const on = selMode.keys.has(keys[i]);
+        tr.classList.toggle('grid-sel-row', on);
+        const cb = tr.querySelector('.grid-cbx');
+        if (cb) cb.checked = on;
+        if (tr.style.display !== 'none') { visN++; if (on) selVis++; }
+      });
+      const allCb = table.querySelector('thead .grid-cbx-all');
+      if (allCb) {
+        allCb.checked = visN > 0 && selVis === visN;
+        allCb.indeterminate = selVis > 0 && selVis < visN;
+      }
+    } else {
+      const ths = table.tHead.rows[0].cells;
+      allRowsOf(table).forEach(tr => [...tr.cells].forEach((c, ci) => c.classList.toggle('grid-sel-col', selMode.cols.has(ci))));
+      [...ths].forEach((th, ci) => th.classList.toggle('grid-sel-col', selMode.cols.has(ci)));
+    }
+  }
+
   /* ═══════════ 隐藏行/列 + 多选 ═══════════ */
   function toggleRowSel(table, tr) {
     ensureSel(table, 'row');
-    if (selMode.rows.has(tr)) { selMode.rows.delete(tr); tr.classList.remove('grid-sel-row'); }
-    else { selMode.rows.add(tr); tr.classList.add('grid-sel-row'); }
-    showBar();
+    const keys = rowKeys(table);
+    const ri = allRowsOf(table).indexOf(tr);
+    if (ri >= 0) toggleRowKey(table, keys[ri]);
   }
   function toggleColSel(table, ci) {
     ensureSel(table, 'col');
@@ -414,14 +556,26 @@
   function ensureSel(table, kind) {
     if (!selMode || selMode.table !== table || selMode.kind !== kind) {
       clearSelVisual();
-      selMode = { table, kind, rows: new Set(), cols: new Set() };
+      selMode = { table, kind, keys: new Set(), cols: new Set(), tk: tk(table) };
+      table.classList.add('grid-selmode');
+      if (kind === 'row') mountCheckboxes(table);
     }
     return selMode;
+  }
+  /* 表被整表重建（分页/重渲染）后：按 tk 重绑 selMode / barTable 指向新表 */
+  function rebindIfReplaced(table) {
+    if (selMode && selMode.table !== table && selMode.tk === tk(table)) {
+      selMode.table = table;
+      if (selMode.kind === 'row') { mountCheckboxes(table); applySelVisual(table); }
+      if (barTable && !barTable.isConnected) barTable = table;
+    }
   }
   function clearSelVisual() {
     if (!selMode) return;
     selMode.table.querySelectorAll('.grid-sel-row').forEach(el => el.classList.remove('grid-sel-row'));
     selMode.table.querySelectorAll('.grid-sel-col').forEach(el => el.classList.remove('grid-sel-col'));
+    unmountCheckboxes(selMode.table);
+    selMode.table.classList.remove('grid-selmode');
     selMode = null;
   }
   function exitSelMode() { clearSelVisual(); if (barTable) showBar(); }
@@ -430,18 +584,19 @@
     if (!selMode) return;
     const table = selMode.table, kind = selMode.kind;
     const k = tk(table);
-    if (kind === 'row' && selMode.rows.size) {
+    if (kind === 'row' && selMode.keys.size) {
       const set = hiddenRows.get(k) || new Set();
-      const idx = allRowsOf(table);
-      selMode.rows.forEach(tr => { const i = idx.indexOf(tr); if (i >= 0) set.add(i); });
+      selMode.keys.forEach(key => set.add(key));   // 按行身份存，跨页/重渲染稳定
       hiddenRows.set(k, set);
+      selMode.keys.clear();                        // 留在模式里继续勾选
+      applyAll(table);                             // 内部会恢复勾选框与高亮
     } else if (kind === 'col' && selMode.cols.size) {
       const set = hiddenCols.get(k) || new Set();
       selMode.cols.forEach(ci => set.add(ci));
       hiddenCols.set(k, set);
+      clearSelVisual();
+      applyAll(table);
     }
-    clearSelVisual();
-    applyAll(table);
     showBar();
   }
   window.gridRestoreHidden = function () {
@@ -491,43 +646,45 @@
     return menuEl;
   }
 
-  function openRowMenu(table, tr) {
+  /* 2026-10-13 瘦身为 4 项：冻结改开关态（低频的「取消冻结」并入第一项）、
+     多选入口合一、恢复隐藏带计数；图标一律 Material（旧 ❄✂ emoji 退役）；位置跟随鼠标 */
+  function openRowMenu(table, tr, ev) {
     barTable = table;
     const st = freezeState.get(tk(table)) || { fr: 0, fc: 0 };
     const idx = allRowsOf(table);
     const ri = idx.indexOf(tr);
     const hid = hiddenRows.get(tk(table));
-    const sel = selMode && selMode.table === table ? selMode.rows.size : 0;
     openMenu([
-      { label: `❄ 冻结到此行（表头 + 前 ${Math.min(ri + 1, idx.length)} 行数据）`, fn: () => setFreeze(table, ri + 1, null) },
-      { label: '取消行冻结', disabled: !st.fr, fn: () => setFreeze(table, 0, null) },
-      '-',
-      { label: '隐藏此行', fn: () => {
+      { label: `<span class="mi">${st.fr ? 'lock_open' : 'vertical_align_top'}</span> ${st.fr ? '取消行冻结' : `冻结到此行（表头 + 前 ${Math.min(ri + 1, idx.length)} 行）`}`,
+        fn: () => setFreeze(table, st.fr ? 0 : ri + 1, null) },
+      { label: '<span class="mi">visibility_off</span> 隐藏此行', fn: () => {
           const set = hiddenRows.get(tk(table)) || new Set();
-          set.add(ri); hiddenRows.set(tk(table), set); applyAll(table); showBar();
+          const key = rowKeyAt(table, ri);
+          if (key) set.add(key);
+          hiddenRows.set(tk(table), set); applyAll(table); showBar();
         } },
-      { label: `隐藏所选行（${sel}）`, disabled: !sel, fn: () => hideSelected() },
-      { label: '进入多选行模式（点行勾选）', fn: () => { ensureSel(table, 'row'); showBar(); } },
-      { label: '显示全部隐藏行', disabled: !hid || !hid.size, fn: () => { hiddenRows.delete(tk(table)); applyAll(table); showBar(); } },
-    ], tr.getBoundingClientRect().left + 40, tr.getBoundingClientRect().bottom + 2);
+      { label: '<span class="mi">checklist</span> 多选隐藏…', fn: () => { ensureSel(table, 'row'); applySelVisual(table); showBar(); } },
+      '-',
+      { label: `<span class="mi">undo</span> 恢复隐藏（${(hid && hid.size) || 0}）`, disabled: !hid || !hid.size,
+        fn: () => { hiddenRows.delete(tk(table)); hiddenCols.delete(tk(table)); applyAll(table); showBar(); } },
+    ], ev ? ev.clientX : tr.getBoundingClientRect().left, ev ? ev.clientY : tr.getBoundingClientRect().bottom);
   }
-  function openHeadMenu(table, ci, th, label) {
+  function openHeadMenu(table, ci, th, label, ev) {
     barTable = table;
     const st = freezeState.get(tk(table)) || { fr: 0, fc: 0 };
     const hid = hiddenCols.get(tk(table));
-    const sel = selMode && selMode.table === table ? selMode.cols.size : 0;
     openMenu([
-      { label: `❄ 冻结到此列（${esc(label)} 及以左）`, fn: () => setFreeze(table, null, ci + 1) },
-      { label: '取消列冻结', disabled: !st.fc, fn: () => setFreeze(table, null, 0) },
-      '-',
-      { label: `隐藏「${esc(label)}」列`, fn: () => {
+      { label: `<span class="mi">${st.fc ? 'lock_open' : 'vertical_align_top'}</span> ${st.fc ? '取消列冻结' : `冻结到此列（${esc(label)} 及以左）`}`,
+        fn: () => setFreeze(table, null, st.fc ? 0 : ci + 1) },
+      { label: `<span class="mi">visibility_off</span> 隐藏「${esc(label)}」列`, fn: () => {
           const set = hiddenCols.get(tk(table)) || new Set();
           set.add(ci); hiddenCols.set(tk(table), set); applyAll(table); showBar();
         } },
-      { label: `隐藏所选列（${sel}）`, disabled: !sel, fn: () => hideSelected() },
-      { label: '进入多选列模式（点表头勾选）', fn: () => { ensureSel(table, 'col'); showBar(); } },
-      { label: '显示全部隐藏列', disabled: !hid || !hid.size, fn: () => { hiddenCols.delete(tk(table)); applyAll(table); showBar(); } },
-    ], th.getBoundingClientRect().left + 30, th.getBoundingClientRect().bottom + 2);
+      { label: '<span class="mi">checklist</span> 多选隐藏…', fn: () => { ensureSel(table, 'col'); showBar(); } },
+      '-',
+      { label: `<span class="mi">undo</span> 恢复隐藏（${(hid && hid.size) || 0}）`, disabled: !hid || !hid.size,
+        fn: () => { hiddenRows.delete(tk(table)); hiddenCols.delete(tk(table)); applyAll(table); showBar(); } },
+    ], ev ? ev.clientX : th.getBoundingClientRect().left, ev ? ev.clientY : th.getBoundingClientRect().bottom);
   }
 
   /* ═══════════ 悬浮工具条 #gridBar ═══════════ */
@@ -551,23 +708,26 @@
     const nBody = allRowsOf(barTable).length;
     const nHead = barTable.tHead ? barTable.tHead.rows[0].cells.length : 0;
     const mode = selMode && selMode.table === barTable ? selMode.kind : null;
-    const selN = selMode && selMode.table === barTable ? (selMode.kind === 'row' ? selMode.rows.size : selMode.cols.size) : 0;
+    const selN = selMode && selMode.table === barTable ? (selMode.kind === 'row' ? selMode.keys.size : selMode.cols.size) : 0;
 
     bar.innerHTML =
-      `<span class="gb-label">冻结到</span>` +
-      `<select class="gb-sel" onchange="gridBarFreeze('row',+this.value)">` +
-        Array.from({ length: Math.min(8, nBody) + 1 }, (_, i) => `<option value="${i}"${st.fr === i ? ' selected' : ''}>${i ? i + ' 行' : '无'}</option>`).join('') +
-      `</select>` +
-      `<select class="gb-sel" onchange="gridBarFreeze('col',+this.value)">` +
-        Array.from({ length: Math.min(5, nHead) + 1 }, (_, i) => `<option value="${i}"${st.fc === i ? ' selected' : ''}>${i ? i + ' 列' : '无'}</option>`).join('') +
-      `</select>` +
-      `<span class="gb-sep"></span>` +
-      `<button class="gb-btn${mode === 'row' ? ' on' : ''}" onclick="gridBarMode('row')" title="进入后点行勾选">✂ 选行</button>` +
-      `<button class="gb-btn${mode === 'col' ? ' on' : ''}" onclick="gridBarMode('col')" title="进入后点表头勾选">✂ 选列</button>` +
-      `<button class="gb-btn primary" onclick="gridBarHideSel()"${selN ? '' : ' disabled'}>隐藏所选(${selN})</button>` +
-      `<button class="gb-btn" onclick="gridRestoreHidden()"${(nR + nC) ? '' : ' disabled'} title="显示全部被隐藏的行/列">↺ 恢复</button>` +
-      (mode ? `<button class="gb-btn" onclick="gridBarExit()">完成</button>` : '') +
-      (nR || nC ? `<span class="gb-note">已隐藏 ${nR}行/${nC}列</span>` : '');
+      (mode
+        ? `<span class="gb-label">${mode === 'row' ? '点行或行首勾选框选择' : '点表头选择'}</span>` +
+          `<button class="gb-btn primary" onclick="gridBarHideSel()"${selN ? '' : ' disabled'}>隐藏所选（${selN}）</button>` +
+          `<button class="gb-btn" onclick="gridRestoreHidden()"${(nR + nC) ? '' : ' disabled'} aria-label="显示全部被隐藏的行/列"><span class="mi">undo</span> 恢复(${nR + nC})</button>` +
+          `<button class="gb-btn" onclick="gridBarExit()">退出</button>`
+        : `<span class="gb-label">冻结到</span>` +
+          `<select class="gb-sel" onchange="gridBarFreeze('row',+this.value)">` +
+            Array.from({ length: Math.min(8, nBody) + 1 }, (_, i) => `<option value="${i}"${st.fr === i ? ' selected' : ''}>${i ? i + ' 行' : '无'}</option>`).join('') +
+          `</select>` +
+          `<select class="gb-sel" onchange="gridBarFreeze('col',+this.value)">` +
+            Array.from({ length: Math.min(5, nHead) + 1 }, (_, i) => `<option value="${i}"${st.fc === i ? ' selected' : ''}>${i ? i + ' 列' : '无'}</option>`).join('') +
+          `</select>` +
+          `<span class="gb-sep"></span>` +
+          `<button class="gb-btn" onclick="gridBarMode('row')" aria-label="进入后每行出现勾选框，支持跨页累计"><span class="mi">checklist</span> 选行</button>` +
+          `<button class="gb-btn" onclick="gridBarMode('col')" aria-label="进入后点表头勾选"><span class="mi">view_column</span> 选列</button>` +
+          (nR || nC ? `<button class="gb-btn" onclick="gridRestoreHidden()" aria-label="显示全部被隐藏的行/列"><span class="mi">undo</span> 恢复(${nR + nC})</button>` : '')) +
+      (nR || nC && mode ? `<span class="gb-note">已隐藏 ${nR}行/${nC}列</span>` : '');
 
     const rect = barTable.getBoundingClientRect();
     bar.style.display = 'flex';
@@ -581,13 +741,19 @@
   document.addEventListener('mouseover', e => {
     const t = e.target && e.target.closest && e.target.closest('table');
     if (!t || t.closest('.filter-popup') || t.hasAttribute('data-grid-off')) return;
+    rebindIfReplaced(t);
     if (t === barTable) { clearTimeout(barHideTimer); return; }
     if (selMode && selMode.table !== t) return;   // 多选进行中别切换绑定
+    /* 2026-10-12 反馈：悬停正文读数也弹工具条太碍事 →
+       只在悬停「表头」时唤出（冻结/隐藏本来就是表头操作）；
+       已弹出时在表内移动不清除，离开表格 1.5s 后自动隐藏（mouseout 逻辑不变） */
+    if (!(e.target.closest && e.target.closest('thead'))) return;
     barTable = t;
     showBar();
   });
   document.addEventListener('mouseout', e => {
     if (!barEl || barEl.style.display !== 'flex') return;
+    if (selMode && selMode.table === barTable) return;   // 多选模式中工具条常显
     const t = e.target && e.target.closest && e.target.closest('table');
     if (t && t === barTable && !barEl.contains(e.relatedTarget)) {
       clearTimeout(barHideTimer);

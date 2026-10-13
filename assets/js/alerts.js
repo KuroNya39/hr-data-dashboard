@@ -2,7 +2,26 @@
    v8 alerts.js — 8 条预警规则（动态绩效周期 · 遵循筛选器 · 标注人群口径）
    ═══════════════════════════════════════════════════════════════ */
 
-const dismissedAlertTitles = new Set();
+let dismissedAlertTitles = new Set();
+/* 清空/关闭要跨会话记住（用户反馈「每次打开都弹」），但换数据后作废——
+   stamp = 人数 + 数据包保存时间，数据一变提醒就回来（新的人进了 80-105 天窗口） */
+let alertDismissHydrated = false;
+function alertDataStamp() {
+  const n = (typeof rawData !== 'undefined' && rawData) ? rawData.length : 0;
+  const t = (typeof dataSavedAt !== 'undefined' && dataSavedAt) ? dataSavedAt : '';
+  return n + ':' + t;
+}
+function hydrateAlertDismissed() {
+  if (alertDismissHydrated) return;
+  alertDismissHydrated = true;
+  try {
+    const raw = JSON.parse(localStorage.getItem('hrAlertDismissed') || 'null');
+    if (raw && raw.stamp === alertDataStamp() && Array.isArray(raw.titles)) dismissedAlertTitles = new Set(raw.titles);
+  } catch (e) { /* localStorage 不可用就退回会话级 */ }
+}
+function persistAlertDismissed() {
+  try { localStorage.setItem('hrAlertDismissed', JSON.stringify({ stamp: alertDataStamp(), titles: [...dismissedAlertTitles] })); } catch (e) {}
+}
 let activeAlertFilter = null;
 let activeAlertTitle = null;
 
@@ -60,9 +79,8 @@ function generateAlerts() {
   const in30 = new Date(now.getTime() + 30 * 86400000);
   const probationDue = formal.filter(d => {
     if (d.empType !== '试用期') return false;
-    let p = toDate(d.probationEnd);
-    if (!p) { const j = toDate(d.joinDate); if (!j) return false; p = new Date(j.getTime() + 183 * 86400000); }
-    return p >= now && p <= in30;
+    const p = estProbEndOf(d);
+    return p && p >= now && p <= in30;
   });
   push({ type:'warning', icon:'schedule', title:'试用期届满提醒（30 天内）', scope:'formal',
     desc:`${probationDue.length} 名试用期员工即将届满，请及时启动转正评估`,
@@ -71,9 +89,8 @@ function generateAlerts() {
   /* 3. 逾期未转正 — 正式员工 */
   const overdue = formal.filter(d => {
     if (d.empType !== '试用期') return false;
-    let p = toDate(d.probationEnd);
-    if (!p) { const j = toDate(d.joinDate); if (!j) return false; p = new Date(j.getTime() + 183 * 86400000); }
-    return p < now;
+    const p = estProbEndOf(d);
+    return p && p < now;
   });
   push({ type:'critical', icon:'error', title:'逾期未转正', scope:'formal',
     desc:`${overdue.length} 名员工试用届满日已过但状态仍为试用期，请核实流程状态`,
@@ -156,22 +173,28 @@ function updateAlertBadge(alerts) {
 function renderAlerts() {
   const container = document.getElementById('alertBar');
   if (!container) return;
+  hydrateAlertDismissed();
   const alerts = generateAlerts();
   updateAlertBadge(alerts);
+  /* 提醒条只在总览页显示（用户拍板）：#alertBar 就放在 #page-overview 里，
+     靠 .page.hidden 自动隐藏，这里不用再认页面 id */
   if (!alerts.length) { container.innerHTML = ''; container.style.display = 'none'; return; }
   container.style.display = 'flex';
-  container.innerHTML = alerts.map(a => {
+  container.innerHTML =
+    `<div class="alert-head"><span class="alert-head-title"><span class="mi">notifications</span>提醒 ${alerts.length} 项</span>` +
+    `<button class="alert-goto" onclick="clearAllAlerts()" aria-label="本份数据内不再提示（换数据后提醒会恢复）">一键清空</button></div>` +
+    alerts.map(a => {
     const m = SCOPE_META[a.scope] || SCOPE_META.all;
     return `
     <div class="alert-item alert-${a.type}">
       <span class="alert-icon"><span class="mi">${a.icon}</span></span>
       <div class="alert-body">
-        <div class="alert-title">${esc(a.title)}<span class="alert-count">${a.count} 人</span><span class="scope-note ${m.cls}" title="${esc(m.title)}">${m.label}</span></div>
+        <div class="alert-title">${esc(a.title)}<span class="alert-count">${a.count} 人</span><span class="scope-note ${m.cls}" aria-label="${esc(m.title)}">${m.label}</span></div>
         <div class="alert-desc">${esc(a.desc)}</div>
       </div>
       <div class="alert-actions">
         <button class="alert-goto mi-btn" onclick="gotoAlertFilter('${a.page}','${esc(a.title).replace(/'/g, '&#39;')}')">查看</button>
-        <button class="alert-close" title="本次会话不再提示" onclick="dismissAlert(this,'${esc(a.title).replace(/'/g, '&#39;')}')"><span class="mi">close</span></button>
+        <button class="alert-close" aria-label="本次会话不再提示" onclick="dismissAlert(this,'${esc(a.title).replace(/'/g, '&#39;')}')"><span class="mi">close</span></button>
       </div>
     </div>`;
   }).join('');
@@ -184,6 +207,7 @@ function gotoAlertFilter(page, title) {
 }
 function dismissAlert(btn, title) {
   if (title) dismissedAlertTitles.add(title);
+  persistAlertDismissed();
   const item = btn.closest('.alert-item');
   item.style.opacity = '0'; item.style.transform = 'translateX(30px)';
   setTimeout(() => {
@@ -193,4 +217,16 @@ function dismissAlert(btn, title) {
     // dismissedAlertTitles 会改变 generateAlerts() 的结果，所以角标要跟着重算
     updateAlertBadge(generateAlerts());
   }, 250);
+}
+/* 一键清空：当前所有提醒按标题记入已关闭（随数据版本持久化到 localStorage） */
+function clearAllAlerts() {
+  hydrateAlertDismissed();
+  generateAlerts().forEach(a => dismissedAlertTitles.add(a.title));
+  persistAlertDismissed();
+  const c = document.getElementById('alertBar');
+  if (c) {
+    c.style.transition = 'opacity .18s'; c.style.opacity = '0';
+    setTimeout(() => { c.style.display = 'none'; c.style.opacity = ''; c.innerHTML = ''; }, 180);
+  }
+  updateAlertBadge([]);   // 全部已 dismiss，再算一遍必为空
 }

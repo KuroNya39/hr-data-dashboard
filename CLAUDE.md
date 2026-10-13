@@ -14,9 +14,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 HR看板/
 ├─ 看板.html              ← ★ 完整版入口，双击即用
-├─ 分享版/                ← 打包发给同事（自包含，压缩后发）
-│   ├─ 看板.html
-│   └─ assets/{css,js,vendor} + bu-config*.js + hr-data.js   （仅本部门的数据包）
 ├─ assets/
 │   ├─ css/ js/ vendor/   ← 代码与本地化资源（Chart.js / SheetJS / Noto Sans SC / Material Symbols）
 │   ├─ bu-config.js       ← ★ 本部门配置（中性占位，随仓库公开）
@@ -25,8 +22,8 @@ HR看板/
 ├─ data/                  ← ★ 只有两份 Excel（不入库）
 │   ├─ {本部门}人力看板.xlsx ← ★ 手工维护的汇总表（13 sheet，见下；文件名见 bu-config.local.js 的 book）
 │   └─ KPA*.xls           ← 总体人员花名册基准（用户从系统导出更新）
-├─ 工具/                  ← 生成数据包.js · 生成分享版.js · 读取部门配置.js（仅维护者用）
-└─ 使用指南.md · CLAUDE.md
+├─ 工具/                  ← 生成数据包.js · 读取部门配置.js（仅维护者用）
+└─ 设计系统.md · CLAUDE.md
 ```
 
 ### 本部门配置（`assets/bu-config.js` + `assets/bu-config.local.js`）
@@ -34,8 +31,8 @@ HR看板/
 
 | 键 | 含义 |
 |---|---|
-| `code` | 本部门代号，也是数据里「一级部门英文简称」列的值（分享版裁剪的判据） |
-| `label` | 界面显示名（分享版标题/副标题/横幅） |
+| `code` | 本部门代号（配置标识） |
+| `label` | 界面显示名 |
 | `orgMap` | 组织名关键字 → 中心代号，`core.js` 组织归属兜底用；留空 = 不做这层兜底 |
 | `rosterSheet` | 花名册 sheet 名的正则，**必须锚定开头** |
 | `book` | 汇总表文件名（`data/` 下，旧链路里也当 `files.cons` 用） |
@@ -46,7 +43,7 @@ HR看板/
 - **浏览器**：`看板.html` 里两个 `<script>` 顺序加载（占位在前、本地在后），位置在 `hr-data.js` **之前**（`data.js` 一加载就取 `BU.book`）。
 - **node**：`工具/读取部门配置.js` 造一个假 `window` 用 `new Function` 跑这两个文件再取 `BU`，所有生成脚本都 `require` 它。**两边取到的必须是同一份值**，所以别在 node 侧另写一份解析。
 - ⚠️ **键名不要改**（改了要同步 `读取部门配置.js`、`data.js`、`datasource.js`、两个生成脚本）。
-- `window.HR_DATA_FILES` / `window.HR_DATA_SOURCE` 若被显式注入（分享版），优先级高于 `BU.files` / `BU.book`。
+- `window.HR_DATA_FILES` / `window.HR_DATA_SOURCE` 若被显式注入（历史兼容机制），优先级高于 `BU.files` / `BU.book`。
 
 ### 原数据表（文件名见 `bu-config.local.js` 的 `book`；2026-09-12 晚起，用户亲手整理）
 **工作流（用户定的，别改回去）**：用户**手工维护**这张表（人员名单从 KPA 复制粘贴更新），
@@ -55,7 +52,7 @@ sheet 按**关键字**命名，解析器按关键字认表、不认位置：
 
 | sheet | 谓词 | 归属 |
 |---|---|---|
-| 本部门人员名单（从 KPA 复制） | 见 `bu-config.js` 的 `rosterSheet`（**必须锚定开头**——入职名单/高潜名单/C型干部名单都含「名单」）| roster = 分享白名单 |
+| 本部门人员名单（从 KPA 复制） | 见 `bu-config.js` 的 `rosterSheet`（**必须锚定开头**——入职名单/高潜名单/C型干部名单都含「名单」）| roster |
 | 干部梯队26H1绩效考评明细 / 人才梯队26H1绩效考评明细 | `绩效考评明细` | perf |
 | 绩效B-C人员情况 / 27届校招需求 / 招聘未达成需求 / 储备干部名单 / 高潜名单 / 本年度入职名单 / 外包评价 / 部门梯队 | LEDGER_SIGNALS 关键字，且**非** `绩效考评明细` | ledger |
 | C型干部名单 / 26届校招名单 | `C型干部`/`校招名单` | ledger（随包携带，台账页暂无渲染块）|
@@ -97,14 +94,13 @@ SheetJS 容错（它顺着本地头扫），所以 `XLSX.readFile` 照样读得�
 
 ### 数据包格式（`assets/hr-data.js`）
 ```js
-window.HR_DATA = { v:1, scope:'full'|<BU.scope>, built:ISO, files:{emp,perf,ledger,manual},
+window.HR_DATA = { v:1, scope:'full', built:ISO, files:{emp,perf,ledger,manual},
                    books:{ emp:[[sheetName, AOA]], perf:[...], ledger:[...], manual:[...] } };
 ```
 - 存 **AOA**（`sheet_to_json(header:1)` 的结果）。加载端 `packSheetToWorkbook()` 用 `aoa_to_sheet` 还原成 workbook，
   直接喂现有 `ingestWorkbook()` —— **解析逻辑一行都没改**，口径与「拖文件进来」完全一致。
-- `books.manual` **含花名册**（手工 4 张 + 花名册 = 5 张）。`rosterIdsFromPack()` 从它取工号白名单，
-  「用花名册导出分享版」不选文件就能裁。
-- 体积/耗时：全量 2.3MB / 900ms，仅本部门 1.1MB / 500ms。
+- `books.manual` **含花名册**（手工表 + 花名册）。
+- 体积/耗时：全量约 2.6MB / 900ms。
 
 ### 加载优先级（`data.js` 的 `init()`）
 1. `restoreSnapshot()`（IndexedDB）——「接着上次看到的地方」，也是拖入新数据后的暂存
@@ -112,24 +108,62 @@ window.HR_DATA = { v:1, scope:'full'|<BU.scope>, built:ISO, files:{emp,perf,ledg
 3. `data/` 目录 fetch —— 仅用 http 打开时的兜底
 4. 都没有：停在拖入界面
 
-### 三条链路
+### 链路
 - **打开**：双击 `看板.html`
-- **更新**（数据维护面板三组按钮）：
-  - 组「更新数据」：**从 data 文件夹读取最新数据**（授权一次，之后一点即读，最省事）· 回到数据包 · 把当前数据保存为数据包
-  - 组「分享给本部门管理人员」：**用花名册导出分享版** · 导出分享版数据（仅本部门）· 用指定名单导出分享版
-  - 组「其它」：清空浏览器缓存
-  - 另有：拖 Excel 进页面（临时生效、自动记住；`_packedBooks` 会记下 AOA 供固化）
-- **分享**：任选上述一种导出 → 把整个 `分享版/` 压缩发送
+- **更新**：双击根目录 **`更新数据.bat`**（→ `update-data.js` → `工具/生成数据包.js`）重新生成
+  `assets/hr-data.js`，回看板按 F5。`built` 变了，旧快照自动作废。
+- **临时看一份新导出的表**：拖 Excel 进页面，或点顶栏「上传数据」（人员/绩效/台账/整份汇总表自动识别）。
+  只改浏览器里的当前内容，不动数据文件。
 
-### 分享版安全设计（物理裁剪，不是界面隐藏）
-- 数据包里只保留**花名册里的工号**（有花名册时）或 `一级部门英文简称 === BU.code` 的行（无花名册时回落）
-- 当前结果：只留本部门的行，其余全部剔除（按中心模式时另剔除其他中心的行）
-- IDB 库名隔离 `hr-dashboard-v8-shared`，否则会从完整版缓存里恢复出含其他中心的数据
-- **自检判据二选一**：有花名册 → 工号必须在名单内；无花名册 → 决定中心归属的那一列必须是本部门代号。
-  三处实现（`生成数据包.js` 自检、`生成分享版.js` 第 5.1 步、`data.js` 的 `buildSwcPackText`）判据必须一致。
-- ⚠️ **不要对整个 JSON / HTML 做全文正则扫中心名。** 与中心简称同名的值（「公司英文简称」列里有 `XP`）、
-  成本中心描述里的其他中心字样，都会误报。这个坑踩过两次，后果是**分享版永远导不出去**（自检永远不通过）。
-  同理，代码注释里也不要写具体中心名，否则 `生成分享版.js` 的 HTML/JS 扫描会命中。
+> 分享版功能已于 2026-10-12 按用户要求整体移除（产物目录、导出按钮、`生成分享版.js`、
+> `生成数据包.js --share` 分支与安全自检）。备份见 `.workbuddy/backup/share-removal-20261012.tar`。
+- **v8.10 设计系统落地**（2026-10-13）：新建 **`设计系统.md`**（13 节：原则 / IA / 色彩 / 度量 /
+  状态模型 / 交互 / 动效 / 图标 / 组件速查表 / a11y 清单 / 令牌流程 / **例外与弯路记录**），
+  按「当前事实」写，**改样式前先读它的「改动自查清单」**。
+  - **令牌层重建**：`style.css` 的 `:root` 收敛为 **90 个令牌，逐个有用户、无悬挂引用**；
+    删 6 个零引用档（`--fs-44` `--fw-normal` `--ctl-h-lg` `--hit-touch` `--t-fast` `--t-base`），
+    把原有但没人用的 `--shadow-pop` / `--hit-min` 接上（→ `.filter-popup` / `.link-btn`）。
+    间距归 8 网格（4/8/16/24/32/48），字号去半像素档。
+  - **等级配色换层**：原先 `campusGradePill`/`trackGradePill` 用 **JS 挑分类色板**（`--s1…--s6`）当白底文字色，
+    `--s2` 绿 3.3:1、`--s5` 黄绿 1.6:1 全不达标；改为**归档位色阶**（`.pill-grade-*` → `--gtag-*`，
+    与绩效 `.tag-grade-*` 同批色）。`core.js` 抽 `GRADE_RUNG` + `gradeRung()` 作**唯一映射**，JS 不再挑色。
+  - **修 3 处实测问题**：`.link-btn` 命中区 38×17 → 38×25；等级药丸对比度 3.3 → 5.18–8.31（浅）/ 9.03–12.99（深）；
+    `.filter-bar select:focus` 等写 `outline:none` 权重压过全局 `:focus-visible`、把焦点环删了（改为只加描边）。
+    另修 `.filter-popup` 影层用错、`--ink-3` 按白底校准（改按最深底色 `--surface-2`）。
+  - **验收**：`.workbuddy/tmp-ds-probe.js` **32/32 通过、0 console 错误**；焦点环真键盘 Tab 驱动 30/30 有环
+    （`page.focus()` 是程序聚焦、Chromium 不认作键盘模态，会误报，勿用它验焦点环）。
+  - 删 `使用指南.md`（内容并入 `设计系统.md`）。
+- **v8.9 社招两页落地 + 日常办公组删除 + 流失时间窗 + 结构分布区**（2026-10-12）：
+  - 菜单「招聘管理」→「社招管理」，`recruit_overview/recruit_need` 从占位转正为「社招概览/社招需求」；
+    数据 = `ledgerData.recruitOpen`（`parseRecruitOpen` 已补「备注」列）。口径：备注含「已入职」=达成（剔除出缺口 KPI，
+    需求页保留打绿标 `pill-done`）；渠道三分 正式工(s1)/外协(s2)/双渠道(s4)；原因归五桶（离职替补/人力缺口/新增需求/技术攻坚/其他）。
+    概览 = 5 KPI + 部门×渠道堆叠 + 原因环图 + 影响项目 Top15 hbar + 明细表；需求页 = 5 KPI + 全量明细表（grid 自动筛选）。
+  - 删「日常办公」组四页（structure/demographics/health/ledger）：renderStructure/renderDeptMatrix/renderDemographics/
+    renderHealth/renderLedger/renderBudgetGap/tc2/structureScope/scopeWord 全删，refreshAll 对应清理，
+    `refreshAll` 的 `!rawData.length` 分支改为直接 return。ledger.js 解析层保留（社招数据 + 未来校招页共用），
+    顶栏「上传台账」按钮保留（后于同日并入「上传数据」）。台账里的末位改进/储备干部/高潜/校招需求等块的**数据仍在**（ledgerData），后续占位页可直接消费。
+  - **顶栏精简 + 面板/简报页整体移除**（2026-10-12，用户要求）：五个顶栏按钮
+    （上传人员数据/上传绩效数据/上传台账/数据维护/简报模式）合并为一个靠右的 **「上传数据」**（`.tb-right`），
+    走 `uploadData()` → `handleFiles`（`ingestWorkbook` 按 台账→人员→绩效 依次判定，用户不用先选类型；
+    绩效 sheet 表头是「工号/姓名」而 `FIELD_MAP` 只认「员工编号/员工姓名」，所以不会被误当人员表吞掉）。
+    **数据维护面板**（`#dataPanel`/`#dataPanelOverlay`/`toggleDataPanel`/`refreshDataPanel`/`reloadDataSource`/
+    `saveDataPack`/`reloadFromDataFolder`/`clearSnapshot`/`buildPackText`/`pickDir`/`writeFileInDir`/`idbGetKey`/
+    `idbSetKey`/`rosterIdsFromPack`/`dsUpdateStatusUI` 及全部 `.dp-*` 样式、`--z-dp*`/`--shadow-drawer` 令牌）
+    与**简报模式页**（`#page-brief`/`renderBrief`/`PAGE_TITLES.brief`/全部 `.brief-*` 样式）一并删除。
+    数据更新改由 `更新数据.bat` 承担；`_packedBooks` 与 `wbToPack()`（只为「保存为数据包」而存在）随之删除。
+    ⚠️ 副作用：面板里那个「回到数据包 / 清空浏览器缓存」没了，唯一的回退路径是重跑 `更新数据.bat` 换 `built` 再 F5。
+  - 人员异动页加「统计窗口」分段切换（flowWin: m3/m6/m12/m24/ytd/all，`flowWindowOf()` 返回 months+sinceMs，
+    all 档探测数据起点、趋势图最多 60 个月；rollingTurnover 改签名 `(scopeArr, months, sinceMs)`）。
+    作用于流失+入职板块全部 KPI/图表；转正与合同不跟随。
+  - 人员概览新增「结构分布」区（renderStructDist，13 图三组：职级体系 level/level·subLevel/jobFamily/position Top15；
+    人群画像 gender/age/talentPipeline/edu/workLocation；年限与来源 tenure/工龄/社经vs司龄/招聘来源），
+    口径开关 seg-switch（仅正式默认/全员，filterGroup 指定人群时遵从）；旧 demographics 页的
+    学历/地点/社经vs司龄图逻辑并入。新 helper：`hbarChart`（indexAxis:y + parsed.x tooltip）。
+    `parseRecruitOpen` 的过滤从 `!n ||` 改为只看部门空——需求人数 0 的行要保留（备注=已入职）。
+  - 验证：probe 脚本 `.workbuddy/tmp-probe-new.js`（社招两页 KPI/表格/绿标 + 窗口切换 + 结构区 13 图）全过 0 console 错误。
+- **v8.8 移除分享版功能**（2026-10-12，用户要求）：删 `分享版/` 目录、`工具/生成分享版.js`、
+  看板面板分享按钮组 3 个、`data.js` 分享导出函数块（buildSharePackText/writeSharePack/三个入口）、
+  `生成数据包.js` 的 `--share` 分支与安全自检。`--out` 参数保留。全量包重出验证 ✓。
 - **v8.7 侧边栏二级菜单 + 人员概览页**（2026-09-13，按「人力看板设计说明.md」实现）
   - **侧边栏改两级**：7 个一级组（人员/招聘/校招/人才梯队/干部梯队/绩效/外包）+「日常办公」旧页区。
     一级菜单可展开/收起（`toggleNavGroup()` + `.nav-group.open`），当前页高亮一级也高亮二级。
@@ -190,7 +224,7 @@ window.HR_DATA = { v:1, scope:'full'|<BU.scope>, built:ISO, files:{emp,perf,ledg
      - **（已删）`工具/建汇总表.js`**：曾负责散装 Excel → 汇总表，v8.7 起弃用删除。其「看板」公式页经验仍有效（**全部用 SUMPRODUCT，不用 COUNTIFS** —— `"<>T"` 在空单元格上行为不一致会算错；行号一律运行时算，不写死，否则前面插一行全错）
      - **`生成数据包.js` 改为按 sheet 名从汇总表拆四路**；人员**优先取 `KPA*.xls` 原文件**（HTML 要看新鲜原表），找不到才回落汇总表副本
      - **浏览器端新增**：`ingestConsolidated()` / `looksLikeConsolidated()` / `subWorkbook()` / `rosterIdsFromPack()` / `exportSharePackByRoster()` / `isRosterSheet()`。`handleFiles` 会识别「整份汇总表」并自动拆解 → **用户可以整份拖进来**
-     - **花名册成为分享名单的权威来源**：删一行 = 以后不再发这个人。`buildSwcPackText(emp, ids)` 加白名单模式（`mode:'roster'`），无花名册时回落按中心列裁（`mode:'center'`）
+     - **花名册成为分享名单的权威来源**：删一行 = 以后不再发这个人。分享版数据包生成加白名单模式（`mode:'roster'`），无花名册时回落按中心列裁（`mode:'center'`）
      - **数据维护面板重排为三组 7 个按钮**：更新数据（从 data 文件夹读取最新数据 · 回到数据包 · 把当前数据保存为数据包）/ 分享给本部门管理人员（用花名册导出分享版 · 导出分享版数据（仅本部门）· 用指定名单导出分享版）/ 其它（清空浏览器缓存）
      - **`生成数据包.js` 的 `findFile()` 按 mtime 取最新一份**（导出文件名带时间戳，按名字排序会拿到旧的）
      - **踩坑记录**：T1 台账 sheet 的 `!ref` 声明假范围（上百万行），遍历前必须 `sheetRowsSafe()`/`aoaOfSheet()` 裁剪；
@@ -203,14 +237,14 @@ window.HR_DATA = { v:1, scope:'full'|<BU.scope>, built:ISO, files:{emp,perf,ledg
        `relocate-share.js` 复制 116 文件到别的目录仍能双击打开
 - **结构**：`js/core.js`（状态/字段映射/人群分组/口径工具/解析/图表封装）→ `js/ledger.js` → **`js/datasource.js`**（手工数据源）→ `js/pages.js`（9 页渲染）→ `js/table.js` → `js/alerts.js`（8 条预警带口径）→ `js/data.js`（汇总表拆分/上传/自动加载/台账识别/IndexedDB/筛选器，最后加载）
 - **页面**：总览 / 组织与用工 / 人员结构 / 人员流动 / 转正与合同 / 梯队绩效盘点 / 职级健康度 / **HR 工作台账** / 员工明细 / 简报模式
-- **数据持久化**：IndexedDB `hr-dashboard-v8`（人员 + 绩效 + 台账三份快照），上传后自动存，重开自动恢复；**分享版用独立库 `hr-dashboard-v8-shared`**（库名由 `window.HR_IDB_NAME` 可配）
+- **数据持久化**：IndexedDB `hr-dashboard-v8`（人员 + 绩效 + 台账三份快照），上传后自动存，重开自动恢复（库名由 `window.HR_IDB_NAME` 可配，历史兼容）
 - **数据坑备忘（v8 新增）**
   - 台账 sheet 的 `!ref` 存在**声明假范围**（如「招聘未达成需求」声明 1048536 行 × 16374 列），必须用 `sheetRowsSafe()` 裁剪后再遍历，否则 OOM
   - 台账汇总行（「合计/小计」）名称列为空，解析时须用 `!lv(cellAt(row, i.dept))` 过滤，否则会被算成数据行
   - 台账存在**右侧小表**，取说明性文本时只取每行最靠左一格 ≥8 字符且含中文的长文本，避免串行
   - 绩效结果**只保留每半年度等级**，细分维度不接入（自评名单不接入）
 - **测试**：Node 验收脚本 `~/.workbuddy/binaries/node/workspace/test-v8.js`（core+ledger+pages 同作用域 eval + 真实 Excel 跑数）
-  - **file:// 冒烟（当前主用）**：`walk-file.js`（完整版）· `walk-share.js`（分享版）· `walk-consolidated.js`（整份汇总表拖入）· `relocate-share.js`（换目录自包含）。
+  - **file:// 冒烟（当前主用）**：`walk-file.js`（完整版）· `walk-consolidated.js`（整份汇总表拖入）。
     运行：`cd ~/.workbuddy/binaries/node/workspace && export NODE_PATH=C:/Users/wushangyan/node_modules && "D:/nodejs/node.exe" walk-file.js`
     —— **用系统 node `D:\nodejs\node.exe`**（托管 node 有批量删除保护，`生成分享版.js` 会被拦）。
     脚本 `console.log('done')` 收尾，**结果要读 `%TEMP%` 下的同名 txt**，stdout 只有 done。

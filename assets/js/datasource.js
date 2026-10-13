@@ -31,7 +31,7 @@ let dsDataVersion = 0;    // 版本号，供 refreshAll 判断是否需要重绘
    2026-09-12 晚起 = data/ 下那份手工维护的汇总表（表名见 bu-config.js 的 book）。
    旧的「手工四张表」（部门编制/指标目标/月度快照/招聘计划）已按用户要求移除，
    对应指标静默降级显示「—」。
-   分享版走内联数据包，不经过这里。 */
+   */
 const DS_PATH = (typeof window !== 'undefined' && window.HR_DATA_SOURCE) ||
   ('data/' + (((typeof window !== 'undefined' && window.BU) || {}).book || '人力看板.xlsx'));
 
@@ -81,7 +81,6 @@ async function loadDataSource(silent) {
     dsData.errors = [String(e.message || e)];
     if (typeof console !== 'undefined') console.warn('数据源未加载（看板正常降级）：', e.message || e);
     if (!silent) showToast('数据源读取失败：' + (e.message || e) + '（看板其余功能不受影响）', true);
-    dsUpdateStatusUI();
     return null;
   }
 }
@@ -97,7 +96,6 @@ function loadDataSourceFromPack(wb, fileName) {
     dsData.loaded = false;
     dsData.errors = [String(e.message || e)];
     if (typeof console !== 'undefined') console.warn('数据源（数据包）解析失败：', e.message || e);
-    dsUpdateStatusUI();
     return null;
   }
 }
@@ -198,9 +196,6 @@ function parseDataSourceWorkbook(wb) {
     }
   }
 
-  /* 顺手记下原始 AOA：保存数据包时直接写回这份，不用反推 */
-  try { if (typeof wbToPack === 'function') _packedBooks.manual = wbToPack(wb); } catch (e) {}
-
   return ds;
 }
 
@@ -212,22 +207,6 @@ function adoptDataSource(ds, silent) {
     const n = ds.budget.length + Object.keys(ds.targets).length + ds.monthly.length + ds.recruitPlan.length;
     if (n > 0) showToast(`数据源已读取：编制 ${ds.budget.length} · 目标 ${Object.keys(ds.targets).length} · 快照 ${ds.monthly.length} · 招聘 ${ds.recruitPlan.length}`);
     else showToast('数据源文件已读到，但各表都还没有填数据', true);
-  }
-  dsUpdateStatusUI();
-}
-
-/* ── 界面上数据源的状态提示（放顶栏按钮上） ── */
-function dsUpdateStatusUI() {
-  const dot = document.getElementById('dsDot');
-  if (dot) dot.className = 'btn-dot' + (dsData.loaded ? ' loaded' : '');
-  const btn = document.getElementById('dsBtn');
-  if (btn) {
-    const n = dsData.loaded
-      ? (dsData.budget.length + Object.keys(dsData.targets).length + dsData.monthly.length + dsData.recruitPlan.length)
-      : 0;
-    btn.title = dsData.loaded
-      ? `手工数据源已加载（${n} 条）· 点此重新读取`
-      : '手工数据源未加载 · 点此重试';
   }
 }
 
