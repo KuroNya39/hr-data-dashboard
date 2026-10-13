@@ -76,10 +76,14 @@
   --radius-pill:999px; /* 药丸：徽标、状态点、分段条、chip */
 
   /* ── 动效：时长与缓动各给档位，取用时用下面「拼好的组合」，不自己拼 ── */
-  --dur-fast:120ms;  /* 按下反馈、悬停变色 */
-  --dur-base:180ms;  /* 提示、小浮层、下拉 */
-  --dur-slow:260ms;  /* 弹窗、抽屉、面板、图表入场 */
-  --ease-out:cubic-bezier(.22,1,.36,1);   /* 进场（开头快，感觉响应快） */
+  --dur-fast:150ms;  /* 按下反馈、悬停变色 */
+  --dur-base:220ms;  /* 提示、小浮层、下拉、页面入场 */
+  --dur-slow:300ms;  /* 弹窗、抽屉、面板、图表入场（已到 300ms 上限） */
+  /* 进场曲线：**仍是开头快**（响应感不丢），但后半段收得缓。
+     ⚠️ 别换回 cubic-bezier(.22,1,.36,1)——那是 easeOutExpo 级的前置曲线，
+        前 15% 的时间就走完九成距离，眼睛看到的是「啪」一下而不是「入场」。
+     用户 2026-10-13 反馈「动效太快、突兀」就是这么来的。 */
+  --ease-out:cubic-bezier(.215,.61,.355,1);
   --ease-inout:cubic-bezier(.65,0,.35,1); /* 屏上移动 / 形变 */
   --ease:cubic-bezier(.4,0,.2,1);         /* 悬停、颜色变化 */
   --t-color:color var(--dur-fast) var(--ease), background-color var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease);

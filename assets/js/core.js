@@ -574,7 +574,7 @@ let _barFont = null;
 let _chartMotion = null;
 function chartMotion() {
   return _chartMotion || (_chartMotion = {
-    reduced: reduceMotion(), slow: cssMs('--dur-slow', 260), fast: cssMs('--dur-fast', 120),
+    reduced: reduceMotion(), slow: cssMs('--dur-slow', 300), fast: cssMs('--dur-fast', 150),
   });
 }
 function chartDefaults(tc) {
@@ -587,13 +587,15 @@ function chartDefaults(tc) {
        ② mode 默认 nearest：永远吸附最近的元素，鼠标在图上任意位置都有反馈；
           多数据集图表（分组/堆叠/双线）在 makeChart 里升级为 index（整列对齐）。
        ③ transitions.active 默认 400ms —— 悬停高亮和 tooltip 淡入要等半拍才出现，
-          这才是「不灵敏」的体感主因，压到 120ms 跟手不拖影。 */
+          这才是「不灵敏」的体感主因，压到 --dur-fast（150ms）跟手不拖影。 */
     interaction: { mode:'nearest', intersect:false },
     hover: { mode:'nearest', intersect:false },
     /* 入场动画：Chart.js 默认 1000ms，一次筛选变化会让 40+ 张图各跑一遍，
-       是「点一下要等一下」的主因。收进令牌的 --dur-slow（260ms，UI 动效上限 300ms）。
-       easing 用 Chart.js 的 easeOutQuart 对应令牌里的 --ease-out（cubic-bezier(.22,1,.36,1)）。 */
-    animation: mo.reduced ? false : { duration: mo.slow, easing: 'easeOutQuart' },
+       是「点一下要等一下」的主因。收进令牌的 --dur-slow（300ms，正好是 UI 动效上限）。
+       easing 用 Chart.js 的 easeOutCubic 对应令牌里的 --ease-out（cubic-bezier(.215,.61,.355,1)）。
+       ⚠️ 别换回 easeOutQuart —— 它和 CSS 侧旧的 expo 曲线同族，前段太陡，
+          用户 2026-10-13 反馈「太快、突兀」就是这个。 */
+    animation: mo.reduced ? false : { duration: mo.slow, easing: 'easeOutCubic' },
     transitions: { active: { animation: { duration: mo.fast } } },
     layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
     plugins: {

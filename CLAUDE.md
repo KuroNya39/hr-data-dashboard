@@ -117,6 +117,16 @@ window.HR_DATA = { v:1, scope:'full', built:ISO, files:{emp,perf,ledger,manual},
 
 > 分享版功能已于 2026-10-12 按用户要求整体移除（产物目录、导出按钮、`生成分享版.js`、
 > `生成数据包.js --share` 分支与安全自检）。备份见 `.workbuddy/backup/share-removal-20261012.tar`。
+- **v8.11 动效放缓**（2026-10-13，用户反馈「太快、突兀」）：
+  - 三档时长整体上抬：`--dur-fast` 120→**150ms**、`--dur-base` 180→**220ms**、`--dur-slow` 260→**300ms**
+    （300 就是 UI 动效上限，**别再往上加**）。
+  - **主因不是时长而是曲线**：`--ease-out` 原为 `cubic-bezier(.22,1,.36,1)`（easeOutExpo 级），
+    前 15% 时间就走完九成距离，眼睛看到的是「啪」一下。换成 `cubic-bezier(.215,.61,.355,1)`
+    （easeOutCubic 同族）——仍然开头快（响应感不丢），但把位移摊到整段时长上。
+    `core.js` 的图表入场同步 `easeOutQuart` → **`easeOutCubic`**，**CSS 与 Chart.js 两边必须同族**。
+  - 逐项交错（24ms/档、第 6 块封顶 120ms）与 reduced-motion 降级不变。
+  - 验收：`.workbuddy/tmp-motion.js` **9/9 通过、0 console 错误**（含 reduced-motion 下
+    位移降级成 `ds-fade`、图表 `animation:false`）。
 - **v8.10 设计系统落地**（2026-10-13）：新建 **`设计系统.md`**（13 节：原则 / IA / 色彩 / 度量 /
   状态模型 / 交互 / 动效 / 图标 / 组件速查表 / a11y 清单 / 令牌流程 / **例外与弯路记录**），
   按「当前事实」写，**改样式前先读它的「改动自查清单」**。
