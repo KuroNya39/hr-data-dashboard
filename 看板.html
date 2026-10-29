@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0" data-page-node-id="EQ99iILRJhdYtSQQXrAZm8">
 <meta name="description" content="HR 数据看板 — 三类人群分开统计、部门可下钻、口径可标注的 HRBP 工作台。本地 Excel 解析，数据不出本机。" data-page-node-id="9OWsaiD7ESJVVSTybZ154e">
 <title>HR 数据看板</title>
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232563eb'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='700' fill='white' text-anchor='middle' font-family='sans-serif'%3EHR%3C/text%3E%3C/svg%3E" data-page-node-id="YnyqME1QhUmeSqcFeoytes">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%233186ff'/%3E%3Ctext x='16' y='22' font-size='14' font-weight='700' fill='white' text-anchor='middle' font-family='sans-serif'%3EHR%3C/text%3E%3C/svg%3E" data-page-node-id="YnyqME1QhUmeSqcFeoytes">
 <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('hr8-theme')||'light');</script>
 <script src="assets/vendor/chart.umd.min.js"></script>
 <script src="assets/vendor/xlsx.full.min.js"></script>
@@ -31,7 +31,7 @@
         <div class="nav-sub">
           <button class="nav-item" data-page="people" onclick="switchPage('people')">人员概览</button>
           <button class="nav-item" data-page="move" onclick="switchPage('move')">人员异动</button>
-          <button class="nav-item" data-page="employee" onclick="switchPage('employee')">人员明细<span class="nav-badge" id="navBadge"></span></button>
+          <button class="nav-item" data-page="employee" onclick="switchPage('employee')">人员明细</button>
         </div>
       </div>
 
@@ -39,15 +39,15 @@
       <div class="nav-group" data-group="recruit">
         <button class="nav-group-head" aria-expanded="false" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">manage_search</span></span>招聘管理<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
         <div class="nav-sub">
-          <div class="nav-sec open" data-sec="social">
-            <button class="nav-sec-head" aria-expanded="true" onclick="toggleNavSec(this)">社招<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+          <div class="nav-sec" data-sec="social">
+            <button class="nav-sec-head" aria-expanded="false" onclick="toggleNavSec(this)">社招<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
             <div class="nav-sec-items">
               <button class="nav-item" data-page="recruit_overview" onclick="switchPage('recruit_overview')">社招概览</button>
               <button class="nav-item" data-page="recruit_need" onclick="switchPage('recruit_need')">社招需求</button>
             </div>
           </div>
-          <div class="nav-sec open" data-sec="campus">
-            <button class="nav-sec-head" aria-expanded="true" onclick="toggleNavSec(this)">校招<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
+          <div class="nav-sec" data-sec="campus">
+            <button class="nav-sec-head" aria-expanded="false" onclick="toggleNavSec(this)">校招<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
             <div class="nav-sec-items">
               <button class="nav-item" data-page="campus_overview" onclick="switchPage('campus_overview')">校招概览</button>
               <button class="nav-item" data-page="campus_need" onclick="switchPage('campus_need')">校招需求</button>
@@ -70,7 +70,8 @@
       <div class="nav-group" data-group="talent">
         <button class="nav-group-head" aria-expanded="false" onclick="toggleNavGroup(this)"><span class="ico"><span class="mi">military_tech</span></span>人才盘点<span class="nav-arrow"><span class="mi">expand_more</span></span></button>
         <div class="nav-sub">
-          <button class="nav-item" data-page="talent_hp" onclick="switchPage('talent_hp')">高潜名单</button>
+          <button class="nav-item" data-page="talent_hp" onclick="switchPage('talent_hp')">高潜盘点</button>
+          <button class="nav-item" data-page="talent_promo" onclick="switchPage('talent_promo')">职等晋升</button>
           <button class="nav-item" data-page="talent_res" onclick="switchPage('talent_res')">储备干部</button>
           <button class="nav-item" data-page="cadre_c" onclick="switchPage('cadre_c')">C型干部</button>
         </div>
@@ -151,7 +152,7 @@
 
         <!-- ═══ 人员概览（新）═══ -->
         <section class="page hidden" id="page-people">
-          <div class="module-head"><h3><span class="mi">people</span>人员规模</h3><span class="chart-note" id="peopleScaleNote">截至数据更新</span></div>
+          <div class="module-head"><h3><span class="mi">people</span>人员画像</h3><span class="chart-note" id="peopleScaleNote">截至数据更新</span></div>
           <div class="kpi-row" id="peopleScaleRow"></div>
 
           <div class="module-head"><h3><span class="mi">donut_large</span>人员结构</h3></div>
@@ -165,15 +166,12 @@
               <div class="chart-box clickable"><canvas id="chartOrgType"></canvas></div>
             </div>
             <div class="chart-card">
-              <div class="chart-header"><h3>职级结构 <span class="mi hint-ico">manage_search</span></h3><span class="chart-note" id="levelStructNote"></span></div>
-              <div id="levelDrill">
-                <div class="chart-box tall"><canvas id="chartSeriesBar"></canvas></div>
-                <div id="drillPanel"></div>
-              </div>
+              <div class="chart-header"><h3>职级结构</h3><span class="chart-note" id="levelStructNote"></span></div>
+              <div class="chart-box tall"><canvas id="chartSeriesBar"></canvas></div>
             </div>
           </div>
 
-          <div class="module-head"><h3><span class="mi">category</span>结构分布</h3><span class="chart-note" id="structDistNote"></span><span class="seg-switch" id="structScopeSwitch"><button class="on" data-sc="formal" onclick="setStructScope('formal')">仅正式</button><button data-sc="all" onclick="setStructScope('all')">全员</button></span></div>
+          <div class="module-head"><h3><span class="mi">category</span>结构分布</h3><span class="chart-note" id="structDistNote"></span></div>
           <div class="struct-sub">职级体系</div>
           <div class="chart-grid">
             <div class="chart-card"><div class="chart-header"><h3>职级分布</h3></div><div class="chart-box tall"><canvas id="chartSDLevel"></canvas></div></div>
@@ -197,15 +195,49 @@
             <div class="chart-card"><div class="chart-header"><h3>招聘来源</h3></div><div class="chart-box"><canvas id="chartSDSource"></canvas></div></div>
           </div>
 
-          <div class="module-head"><h3><span class="mi">swap_horiz</span>人员变化</h3><span class="chart-note" id="peopleChangeNote">全体人员 · 本月 = 数据更新所在月</span></div>
-          <div class="kpi-row" id="peopleChangeRow"></div>
-          <div class="chart-card wide">
-            <div class="chart-header"><h3>近 12 个月入离职趋势</h3><span class="chart-note" id="trend12Note"></span></div>
-            <div class="chart-box clickable"><canvas id="chartPeopleTrend"></canvas></div>
+        </section>
+
+        <!-- ═══ 高潜与快晋升（规则发现 × 台账提名，2026-10-19 转真页）═══ -->
+        <section class="page hidden" id="page-talent_hp">
+          <div class="module-head"><h3><span class="mi">rocket_launch</span>快晋升发现</h3><span class="chart-note" id="hpFastNote"></span></div>
+          <div class="kpi-row" id="hpKpiRow"></div>
+          <div class="list-card">
+            <h3>快晋升名单 <span class="chart-note">总工龄 &lt;10 年 · 职级三档以上（任何序列）</span></h3>
+            <div class="tbl-scroll"><table class="mini-table" id="hpFastTable"></table></div>
           </div>
 
-          <div class="module-head"><h3><span class="mi">notifications_active</span>人员预警</h3><span class="chart-note" id="peopleAlertNote">未来 60 天</span></div>
-          <div class="kpi-row" id="peopleAlertRow"></div>
+          <div class="module-head"><h3><span class="mi">hourglass_bottom</span>职级停滞 · 关注</h3><span class="chart-note" id="hpStagNote"></span></div>
+          <div class="list-card">
+            <h3>长工龄低职等名单 <span class="chart-note">工龄 ≥10 年 · 职等 1-2 档（任何序列）</span></h3>
+            <div class="tbl-scroll"><table class="mini-table" id="hpStagTable"></table></div>
+          </div>
+
+          <div class="module-head"><h3><span class="mi">workspace_premium</span>高潜提报</h3><span class="chart-note" id="hpHpotNote"></span></div>
+          <div class="list-card">
+            <h3>高潜名单（台账提名） <span class="chart-note">含最快晋升 T3 预测与近三期绩效</span></h3>
+            <div class="tbl-scroll"><table class="mini-table" id="hpHpTable"></table></div>
+          </div>
+        </section>
+
+        <!-- ═══ 26H1 职等晋升（2026-10-26 转真页，来源：26H1职等晋升台账）═══ -->
+        <section class="page hidden" id="page-talent_promo">
+          <div class="module-head"><h3><span class="mi">trending_up</span>26H1 职等晋升</h3><span class="chart-note" id="promoNote"></span></div>
+          <div class="kpi-row" id="promoKpiRow"></div>
+          <div class="chart-grid"><div class="chart-card wide"><div class="chart-header"><h3>各部门晋升人数</h3><span class="chart-note" id="promoDeptNote"></span></div><div class="chart-box"><canvas id="chartPromoDept"></canvas></div></div></div>
+          <div class="list-stack">
+            <div class="list-card">
+              <h3>职等晋升名单 <span class="chart-note" id="promoBigNote"></span></h3>
+              <div class="tbl-scroll"><table class="mini-table" id="promoBigTable"></table></div>
+            </div>
+            <div class="list-card">
+              <h3>子等级晋升名单 <span class="chart-note" id="promoSmallNote"></span></h3>
+              <div class="tbl-scroll"><table class="mini-table" id="promoSmallTable"></table></div>
+            </div>
+            <div class="list-card">
+              <h3>转序列调整名单 <span class="chart-note" id="promoSeqNote"></span></h3>
+              <div class="tbl-scroll"><table class="mini-table" id="promoSeqTable"></table></div>
+            </div>
+          </div>
         </section>
 
         <!-- ═══ 建设中（占位）═══ -->
@@ -224,7 +256,7 @@
           <div class="kpi-row" id="recruitKpiRow"></div>
           <div class="chart-grid">
             <div class="chart-card wide"><div class="chart-header"><h3>各部门未达成需求 · 按渠道</h3><span class="chart-note" id="recruitDeptNote"></span></div><div class="chart-box tall"><canvas id="chartRecruitDept"></canvas></div></div>
-            <div class="chart-card"><div class="chart-header"><h3>未达成原因分布</h3><span class="chart-note">按需求人数</span></div><div class="chart-box"><canvas id="chartRecruitReason"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3>原因分布</h3><span class="chart-note">按需求人数</span></div><div class="chart-box"><canvas id="chartRecruitReason"></canvas></div></div>
             <div class="chart-card wide"><div class="chart-header"><h3>影响项目分布</h3><span class="chart-note" id="recruitProjNote"></span></div><div class="chart-box"><canvas id="chartRecruitProject"></canvas></div></div>
           </div>
           <div class="list-card">
@@ -239,6 +271,29 @@
           <div class="list-card">
             <h3>需求明细（含已入职） <span class="chart-note" id="recruitNeedNote"></span></h3>
             <div class="tbl-scroll"><table class="mini-table" id="recruitNeedTable"></table></div>
+          </div>
+        </section>
+
+        <!-- ═══ 校招概览（26 届成果 + 27 届需求盘子，结论层）═══ -->
+        <section class="page hidden" id="page-campus_overview">
+          <div class="module-head"><h3><span class="mi">school</span>26 届成果</h3><span class="chart-note" id="campusOvNote26"></span></div>
+          <div class="kpi-row" id="campusOvKpiRow26"></div>
+          <div class="chart-card wide">
+            <div class="chart-header"><h3>各部门 · 26 届实际到岗 vs 27 届需求</h3><span class="chart-note" id="campusCmpNote"></span></div>
+            <div class="chart-box xl"><canvas id="chartCampusCompare"></canvas></div>
+          </div>
+          <div class="module-head"><h3><span class="mi">flag</span>27 届需求盘子</h3><span class="chart-note" id="campusOvNote27"></span></div>
+          <div class="kpi-row" id="campusOvKpiRow27"></div>
+          <div class="chart-grid">
+            <div class="chart-card"><div class="chart-header"><h3>地域分布</h3><span class="chart-note" id="campusLocNote"></span></div><div class="chart-box"><canvas id="chartCampusLoc"></canvas></div></div>
+            <div class="chart-card"><div class="chart-header"><h3>学历要求</h3><span class="chart-note" id="campusEduNote"></span></div><div class="chart-box"><canvas id="chartCampusEdu"></canvas></div></div>
+            <div class="chart-card wide"><div class="chart-header"><h3>配置原因分布</h3><span class="chart-note" id="campusReasonNote"></span></div><div class="chart-box"><canvas id="chartCampusReason"></canvas></div></div>
+          </div>
+          <div class="list-card">
+            <h3>看明细
+              <button class="tb-btn" onclick="switchPage('campus_need')"><span class="mi">list_alt</span>27 届需求明细</button>
+              <button class="tb-btn" onclick="switchPage('campus_track')"><span class="mi">timeline</span>26 届跟踪明细</button>
+            </h3>
           </div>
         </section>
 
@@ -276,26 +331,41 @@
 
         <!-- ═══ 人员流动 ═══ -->
         <section class="page hidden" id="page-turnover" data-page-node-id="zGZc4KQ9wVuSFVx83xcktC">
-          <div class="win-row"><span class="win-label">统计窗口</span>
+          <div class="module-head"><h3><span class="mi">date_range</span>统计窗口</h3><span class="chart-note" id="flowWinNote"></span></div>
+          <div class="win-row">
             <span class="seg-switch" id="flowWinSwitch">
+              <button data-w="month" onclick="setFlowWin('month')">本月</button>
               <button data-w="m3" onclick="setFlowWin('m3')">近3月</button>
               <button data-w="m6" onclick="setFlowWin('m6')">近6月</button>
               <button data-w="m12" class="on" onclick="setFlowWin('m12')">近12月</button>
-              <button data-w="m24" onclick="setFlowWin('m24')">近24月</button>
-              <button data-w="ytd" onclick="setFlowWin('ytd')">年初至今</button>
-              <button data-w="all" onclick="setFlowWin('all')">全部历史</button>
+              <button data-w="ye" onclick="setFlowWin('ye')">较上年末</button>
+              <button data-w="ye2" onclick="setFlowWin('ye2')">较24年末</button>
+              <button data-w="ye3" onclick="setFlowWin('ye3')">较23年末</button>
             </span>
-            <span class="chart-note" id="flowWinNote"></span>
           </div>
           <div class="kpi-row" id="turnoverKpiRow" data-page-node-id="Tu5nxUJIFgksYWIRj36VsY"></div>
+
+          <!-- 人员变化（2026-10-26 从人员概览整块搬来，与上面共用同一个统计窗口开关；
+               期间入职/期间离职/净增 三张卡已删——与上面「近X月入职/离职」是同一个数。
+               原右上角注记「近X月 · 跟顶栏人群」已删：窗口开关与顶栏人群就在上方，
+               那句只是复述主体，不解释算法（设计系统 §10.9） -->
+          <div class="module-head"><h3><span class="mi">swap_horiz</span>人员变化</h3></div>
+          <div class="kpi-row" id="peopleGrpRow"></div>
+          <div class="chart-card wide">
+            <div class="chart-header"><h3>各部门净变化</h3><span class="chart-note" id="deptNetNote"></span></div>
+            <div class="chart-box clickable"><canvas id="chartDeptNet"></canvas></div>
+          </div>
+
+          <div class="module-head"><h3><span class="mi">calendar_month</span>区间对比</h3><span class="chart-note" id="rangeCompareNote"></span></div>
+          <div class="range-row" id="rangeCompareRow"></div>
+          <div class="module-head"><h3><span class="mi">swap_horiz</span>人员流动</h3></div>
           <div class="chart-grid" data-page-node-id="alV54gcU3fBP4nKxV6yAQ3">
             <div class="chart-card wide" data-page-node-id="hvn7Jc3CWHeHgcUJ6r790K"><div class="chart-header" data-page-node-id="v8DMqpFDCggOSmz2MoVBeG"><h3 data-page-node-id="rlHu2MfiioVUFyhPDggdqp">分月离职率</h3><span class="chart-note" id="monthlyTurnoverNote" data-page-node-id="H5JU6xDgcrzs9OW51R6AH1"></span></div><div class="chart-box" data-page-node-id="6auszTmoEK4CYMWDckpCdV"><canvas id="chartMonthlyTurnover" data-page-node-id="8646yDEiUTRFHy0HDnuUnX"></canvas></div></div>
-            <div class="chart-card wide" data-page-node-id="UKDFFHJ8ElKcBmfOsMAHGB"><div class="chart-header" data-page-node-id="o5BGJKpRv6OJNT0f1aArb5"><h3 data-page-node-id="bFQb0vLGi593zHsATy59EX" id="joinByTypeTitle">近12月入职 · 按用工类型</h3><span class="chart-note" data-page-node-id="bR2fJVTb7jBbAkvfzruBBY">堆积</span></div><div class="chart-box" data-page-node-id="hCu9u4JqkHmPGeir20wdfg"><canvas id="chartJoinByType" data-page-node-id="wlilKMNUPnbd0Q4eMjTt8t"></canvas></div></div>
+            <div class="chart-card wide" data-page-node-id="UKDFFHJ8ElKcBmfOsMAHGB"><div class="chart-header" data-page-node-id="o5BGJKpRv6OJNT0f1aArb5"><h3 data-page-node-id="bFQb0vLGi593zHsATy59EX" id="joinByTypeTitle">近12月入职</h3><span class="chart-note" data-page-node-id="bR2fJVTb7jBbAkvfzruBBY">按月</span></div><div class="chart-box" data-page-node-id="hCu9u4JqkHmPGeir20wdfg"><canvas id="chartJoinByType" data-page-node-id="wlilKMNUPnbd0Q4eMjTt8t"></canvas></div></div>
             <div class="chart-card wide" data-page-node-id="leaverDeptCard"><div class="chart-header" data-page-node-id="leaverDeptHead"><h3 data-page-node-id="leaverDeptTitleEl" id="leaverDeptTitle">各部门流出人数</h3><span class="chart-note" id="leaverDeptNote"></span></div><div class="chart-box" data-page-node-id="leaverDeptBox"><canvas id="chartLeaverDept"></canvas></div></div>
-            <div class="chart-card" data-page-node-id="qCpD1CiPD2K9EKtQ0q9f3X"><div class="chart-header" data-page-node-id="Zvrnfh93kKkGEogSEKDD5y"><h3 data-page-node-id="JxEgsxqn1NHPpVp3j8N4WX">离职人员职级分布</h3><span class="chart-note" data-page-node-id="leaverLevelNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="YHSidN3PLojIFNFWkNeQ7X"><canvas id="chartLeaverLevel" data-page-node-id="cVvXBfSSSuImRf4tPzZMsc"></canvas></div></div>
-            <div class="chart-card" data-page-node-id="J8nnMa5RCTvFReIAoB9Ckv"><div class="chart-header" data-page-node-id="p4SZK06wB4ScJPoCcSBciw"><h3 data-page-node-id="KSs72NzCwphN8iNMpfgmDO">在职时长分布（离职时）</h3><span class="chart-note" data-page-node-id="leaverTenureNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="FrHAKRjtIdEq4T8qUfGrdy"><canvas id="chartLeaverTenure" data-page-node-id="6fUQDlbJgEFnKZAICf2Kht"></canvas></div></div>
-            <div class="chart-card" data-page-node-id="osHgeJJ4k1rZdVMzPA66CU"><div class="chart-header" data-page-node-id="Rf9LTOJp9hAcw5D4V7HOdu"><h3 data-page-node-id="yvEZOzUENYCMMWKElpGO6u" id="leaverTypeTitle">三块人群流出对照</h3><span class="chart-note" id="leaverTypeNote" data-page-node-id="leaverTypeNote">按人群对照</span></div><div class="chart-box" data-page-node-id="BAfmTRYW0Wu9lwGvbWn6r5"><canvas id="chartLeaverType" data-page-node-id="j4o1v3m2FkBkryXoHklgrU"></canvas></div></div>
-            <div class="chart-card" data-page-node-id="bD6iJZTsiSGm2dZrTlVfpG"><div class="chart-header" data-page-node-id="Eep8LHANYiNlg8KJNDspUt"><h3 data-page-node-id="rMv6cq3dQud7kzUExRvTSP">招聘来源（正式离职人员）</h3></div><div class="chart-box" data-page-node-id="rKTMiiQsTdoEzebSW85H1z"><canvas id="chartSource" data-page-node-id="r0JipEzzHCAWHddAno8UZg"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="qCpD1CiPD2K9EKtQ0q9f3X"><div class="chart-header" data-page-node-id="Zvrnfh93kKkGEogSEKDD5y"><h3 data-page-node-id="JxEgsxqn1NHPpVp3j8N4WX">离职人员职级分布</h3><span class="chart-note" id="leaverLevelNote" data-page-node-id="leaverLevelNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="YHSidN3PLojIFNFWkNeQ7X"><canvas id="chartLeaverLevel" data-page-node-id="cVvXBfSSSuImRf4tPzZMsc"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="J8nnMa5RCTvFReIAoB9Ckv"><div class="chart-header" data-page-node-id="p4SZK06wB4ScJPoCcSBciw"><h3 data-page-node-id="KSs72NzCwphN8iNMpfgmDO">在职时长分布（离职时）</h3><span class="chart-note" id="leaverTenureNote" data-page-node-id="leaverTenureNote">正式员工口径</span></div><div class="chart-box" data-page-node-id="FrHAKRjtIdEq4T8qUfGrdy"><canvas id="chartLeaverTenure" data-page-node-id="6fUQDlbJgEFnKZAICf2Kht"></canvas></div></div>
+            <div class="chart-card" data-page-node-id="bD6iJZTsiSGm2dZrTlVfpG"><div class="chart-header" data-page-node-id="Eep8LHANYiNlg8KJNDspUt"><h3 data-page-node-id="rMv6cq3dQud7kzUExRvTSP">招聘来源</h3></div><div class="chart-box" data-page-node-id="rKTMiiQsTdoEzebSW85H1z"><canvas id="chartSource" data-page-node-id="r0JipEzzHCAWHddAno8UZg"></canvas></div></div>
           </div>
         </section>
 
@@ -305,7 +375,6 @@
           <div class="chart-grid" data-page-node-id="NG9DiIbWqfSOffjoSCJS3M">
             <div class="chart-card" data-page-node-id="CYfNq4FeQTNIIQV3G9zWvJ"><div class="chart-header" data-page-node-id="hAAObGvkgCTpMkbENYD8Qo"><h3 data-page-node-id="3DHjiLOgv0tTrTLZC5PluJ">合同 / 协议到期分布</h3><span class="chart-note" data-page-node-id="XTf1y5lmE48lrBdBXuQkTi">未来 90 天在职人员 · 全员</span></div><div class="chart-box" data-page-node-id="WwPi4tSYruGSp5gSMWPXh1"><canvas id="chartContractExpiry" data-page-node-id="3QZvBK4Mjssoo2BCETeLVt"></canvas></div></div>
             <div class="chart-card" data-page-node-id="DavT6slDiECOiSmKGBDSyt"><div class="chart-header" data-page-node-id="ELSbIB5rZl6oouCWtmbZtN"><h3 data-page-node-id="vgfXjzE6XWauOD5FYqukML">合同类型结构</h3><span class="chart-note" data-page-node-id="VtGp98T2E8uvFTimTKSLCh">在职人员 · 全员</span></div><div class="chart-box" data-page-node-id="DI6vV6UhTseU5GAAHbBBVx"><canvas id="chartContractType" data-page-node-id="GMr85L0G6jEHPqDxygFCGw"></canvas></div></div>
-            <div class="chart-card" id="convertTrendCard" data-page-node-id="5he3RljmbSgcnq79lZKUSo"><div class="chart-header" data-page-node-id="B8kI9KmnU91mJIqkHuKmVj"><h3 data-page-node-id="6rHa5TkMYhgUMgbOjVDrHN">近 12 月转正 vs 届满</h3><span class="chart-note" data-page-node-id="lLZKiAZKxxd7ATrHguzNIE">红=实际转正 · 蓝=试用届满（含估算）</span></div><div class="chart-box" data-page-node-id="8zcnj7FoFMYsKfyDp9BwlU"><canvas id="chartConvertTrend" data-page-node-id="lM31bLu8jZJIw9uHlLRnPN"></canvas></div></div>
             <div class="chart-card wide list-card no-print" id="probationCard" data-page-node-id="xGnpIPzHljZCPpPJTYcqVp">
               <h3 data-page-node-id="rdS1Lje4sSHpkM0pka7J6p">转正日历 — 未来 90 天试用届满名单</h3>
               <div class="mini-scroll" data-page-node-id="2IgSZioX2PXWGSbGsW3FfM"><table class="mini-table" id="probationTable" data-page-node-id="D4PpQtbLCjSiFGp8NwTqYg"></table></div>
@@ -324,13 +393,13 @@
             <div class="chart-card wide" data-page-node-id="M99Y8gqJbzAgBAoMuohyk4">
               <div class="chart-header" data-page-node-id="cWHJQB7r8EOKsgI96eNRsc"><h3 data-page-node-id="xYlzWuIbBb0Etff9zAlhjM">人才盘点九宫格</h3><span class="chart-note" id="nineboxNote" data-page-node-id="9BLTqYTlf1ZamOjl1ES7tS"></span></div>
               <div class="ninebox-wrap" id="ninebox" data-page-node-id="izWTEGDac4Jry0A0E2tbwl"></div>
+              <div class="nb-foot" id="nineboxFoot" data-page-node-id="izWTEGDac4Jry0A0E2tbwm"></div>
             </div>
             <div class="chart-card" data-page-node-id="gFRVQEAmzsGMWiZYCTn3ut"><div class="chart-header" data-page-node-id="cf3BE2Te0CzdU9yYMlJvsR"><h3 data-page-node-id="JLidpFtGH6SYYdh5fzEGgk">梯队覆盖</h3><span class="chart-note" id="tierCount" data-page-node-id="bXozSEirvC6sHBUHOzhqPP"></span></div><div class="chart-box" data-page-node-id="x151qApbAHcgLYqQpgCM9L"><canvas id="chartTierType" data-page-node-id="gkbhmnYqJ0JbRATj1BzMnX"></canvas></div></div>
             <div class="chart-card" data-page-node-id="hImaO0HatPtqjlVcNGVLZB"><div class="chart-header" data-page-node-id="3d3Qo9Ee3qWnXWklUuYs1T"><h3 data-page-node-id="TiyvW2ioNdoGzoQIBqHTE6">绩效等级分布</h3><span class="chart-note" id="perfGradeNote" data-page-node-id="dgJK66LobSLgaXcIyaMCgc"></span></div><div class="chart-box" data-page-node-id="XIBoHHYoUHp4zZ8wUPGdzW"><canvas id="chartPerfGradeDist" data-page-node-id="DBeViTcKUUMXqHui7eIXs4"></canvas></div></div>
             <div class="chart-card" data-page-node-id="B0Hguwrd4Ht9teMe4ciyHb"><div class="chart-header" data-page-node-id="ya5g0x0Jj4AjZ9H6gJ1Daw"><h3 data-page-node-id="pCxrbeGC1aF4IRwL3DI3Y4">历史绩效趋势</h3><span class="chart-note" data-page-node-id="rs4WkuNqsddMK567E7UfZb">平均分值 · 动态期数</span></div><div class="chart-box" data-page-node-id="iE8fSIgVb7sfATTQySLgGo"><canvas id="chartPerfTrend" data-page-node-id="iaEAZr3tOd9NiLDHFzp7kp"></canvas></div></div>
-            <div class="chart-card" data-page-node-id="YYlLNjcr6EabuGBj5eIVuB"><div class="chart-header" data-page-node-id="4FVatD40Hu8aFu4Y8ecCpm"><h3 data-page-node-id="nVQQxR8Z5BUM9xmYtCcUK4">工时投入系数分档</h3><span class="chart-note" data-page-node-id="BMFRp4ga69FPg4MNPLnZH3"></span></div><div class="chart-box" data-page-node-id="KUgKpN0JwhDVzcFoH6GTQy"><canvas id="chartInputCoeff" data-page-node-id="hFkfCDA2HvwSSYki32kgOD"></canvas></div></div>
             <div class="chart-card wide list-card" data-page-node-id="27cLqDOvbSgQgnkNsFOqMQ">
-              <h3 data-page-node-id="62GwwHa9vVBxJDCrAPuzAC">梯队人员排名 · 投入明细</h3>
+              <h3 data-page-node-id="62GwwHa9vVBxJDCrAPuzAC">绩效明细</h3>
               <div class="mini-scroll" data-page-node-id="TVLy5BhKnGUPgQxRR01UyN"><table class="mini-table" id="talentTable" data-page-node-id="vOivyYzSwOjCaFyfOZSodL"></table></div>
             </div>
           </div>
@@ -339,7 +408,7 @@
         <!-- ═══ 员工明细 ═══ -->
         <section class="page hidden" id="page-employee" data-page-node-id="ZRQCY4VySELktsW75c0lqe">
           <div class="emp-toolbar no-print" data-page-node-id="HHjGMcN33xAXKf5bzgWKds">
-            <input type="text" id="empSearch" placeholder="搜索工号 / 姓名 / 部门 / 职级…" oninput="debounceSearch(renderEmployeeTable,200)" data-page-node-id="tAZsQoom3ASpjUwsd9a90r">
+            <input type="text" id="empSearch" placeholder="搜索工号 / 姓名 / 部门 / 职级…" oninput="empSearchInput()" data-page-node-id="tAZsQoom3ASpjUwsd9a90r">
             <span class="emp-count" id="empTableCount" data-page-node-id="Bhfe9qrhl8OHGPBakiieiy"></span>
             <span class="emp-count active" id="empFilterHint" data-page-node-id="mEvigCtjE7GtVAQU1i2kMh"></span>
             <button class="tb-btn mi-btn" onclick="clearAllColumnFilters()" data-page-node-id="PH6qyxZIqUP9dsmpxCnS07"><span class="mi">filter_alt_off</span>清除列筛选</button>
@@ -347,6 +416,7 @@
           </div>
           <div id="empAlertBanner" data-page-node-id="4HXEb9B3urgNBy4ZVSuUAU"></div>
           <div class="emp-table-wrap" id="empTableWrap" data-page-node-id="Hb4WklguuFFfZUkeRkhrG4"></div>
+          <div class="pg-bar" id="empPgBar"></div>
         </section>
 
       </div>

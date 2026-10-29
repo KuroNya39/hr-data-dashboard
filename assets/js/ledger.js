@@ -34,7 +34,7 @@ function cellAt(row, idx) { return (idx >= 0 && row && row[idx] !== undefined) ?
 function parseLedgerWorkbook(wb) {
   const out = {
     summary: null, bcPeople: [], campus27: [], campus26: [], outsource: { active: [], left: [], notes: [] },
-    onboard: [], recruitOpen: [], reserveCandidates: [], highPotential: [], deptTier: [],
+    onboard: [], recruitOpen: [], reserveCandidates: [], highPotential: [], deptTier: [], promo: [],
     sheets: wb.SheetNames.slice(),
   };
   for (const sn of wb.SheetNames) {
@@ -56,6 +56,7 @@ function parseLedgerWorkbook(wb) {
       else if (key.includes('储备干部')) out.reserveCandidates = parseReserve(rows);
       else if (key.includes('高潜')) out.highPotential = parseHighPotential(rows);
       else if (key.includes('部门梯队')) out.deptTier = parseDeptTier(rows);
+      else if (key.includes('职等晋升')) out.promo = parsePromo(rows);
     } catch (e) { console.warn('台账 sheet 解析失败:', sn, e); }
   }
   return out;
@@ -192,13 +193,24 @@ function parseCampus26(rows) {
   const hi = findHeaderRow(rows, ['候选人名称', '部门'], 5);
   if (hi < 0) return [];
   const H = rows[hi].map(c => lv(c));
-  const months = [];                       // [{m, mentor:col, lead:col}] 按月升序
+  const months = [];                       // [{m, mentor:col, lead:col, leadStage?}] 按月升序
   H.forEach((h, idx) => {
-    const m = String(h).match(/^(导师|主管)(\d+)月评价$/);
-    if (!m) return;
-    let slot = months.find(x => x.m === +m[2]);
-    if (!slot) { slot = { m: +m[2], mentor: -1, lead: -1 }; months.push(slot); }
-    slot[m[1] === '导师' ? 'mentor' : 'lead'] = idx;
+    let m = String(h).match(/^(导师|主管)(\d+)月评价$/);
+    if (m) {
+      let slot = months.find(x => x.m === +m[2]);
+      if (!slot) { slot = { m: +m[2], mentor: -1, lead: -1 }; months.push(slot); }
+      slot[m[1] === '导师' ? 'mentor' : 'lead'] = idx;
+      return;
+    }
+    /* 主管阶段性评价列（如「主管7-9月阶段性评价」）：挂到结束月的 lead 槽，
+       月度主管评价列缺席时才占用（月度优先），leadStage 记原始范围供表头显示 */
+    const st = String(h).match(/^主管(\d+)-(\d+)月阶段性评价$/);
+    if (st) {
+      const end = +st[2];
+      let slot = months.find(x => x.m === end);
+      if (!slot) { slot = { m: end, mentor: -1, lead: -1 }; months.push(slot); }
+      if (slot.lead < 0) { slot.lead = idx; slot.leadStage = st[1] + '-' + st[2]; }
+    }
   });
   months.sort((a, b) => a.m - b.m);
   const i = {
@@ -217,6 +229,8 @@ function parseCampus26(rows) {
       m: s.m,
       mentor: s.mentor >= 0 ? lv(cellAt(row, s.mentor)) : '',
       lead: s.lead >= 0 ? lv(cellAt(row, s.lead)) : '',
+      /* 该月主管列实为阶段性评价时带范围（如 '7-9'），表头显示用 */
+      ...(s.leadStage ? { leadStage: s.leadStage } : {}),
     })).filter(e => e.mentor || e.lead);
     out.push({
       no: lv(cellAt(row, i.no)), dept: lv(cellAt(row, i.dept)), name: lv(cellAt(row, i.name)),
@@ -279,6 +293,61 @@ function parseOD(rows) {
     (item.status === '已离职' ? res.left : res.active).push(item);
   }
   return res;
+}
+
+/* ── ⑨ 26H1 职等晋升（2026-10-26 接入）──
+   双表头行：R0 分组合并（表头文字可能错位一格），R1 才是字段行。
+   「职等/子等级」在 R1 里出现两次（调整前/调整后），findCol 只认第一个命中，
+   所以调整前后四列按 R1 的先后顺序推：调整类别 → 调整前职等 → 调整前子等级 → 调整后职等 → 调整后子等级。
+   「总裁审批」列在 R0/R1 里标签错位（R0 写在 18，实际数据在 17），
+   不按表头找，直接在行内扫描「通过/不通过」取第一个命中。
+   kind 三分类（口径 2026-10-26 用户拍板）：跨职等=大职等、子职等升档=小职等、转序列降级=转序列（不计入晋升）。 */
+function parsePromo(rows) {
+  /* 表结构是双表头：R0 合并行放组名（调整类别/调整前职等信息/调整后职等信息/调整理由/总裁审批/下一流程），
+     R1 字段行放普通列名（员工编号/二级部门/职等/子等级×2…）。findHeaderRow 命中的是 R1，
+     「调整类别」只存在于 R0 —— 必须拿 rows[hi-1] 补找，否则 iAdj=-1、adj 全空、
+     kind 全部误判成小职等（2026-10-26 截图实锤：大职等 0 / 小职等 46）。 */
+  const hi = findHeaderRow(rows, ['员工编号', '员工姓名'], 6);
+  if (hi < 0) return [];
+  const H = rows[hi].map(c => lv(c));
+  const H0 = hi > 0 ? rows[hi - 1].map(c => lv(c)) : [];
+  const idxFrom = (name, from) => { for (let i = from || 0; i < H.length; i++) if (H[i] === name) return i; return -1; };
+  const idx0From = name => { for (let i = 0; i < H0.length; i++) if (H0[i] === name) return i; return -1; };
+  const iDept = idxFrom('二级部门'), iId = idxFrom('员工编号'), iName = idxFrom('员工姓名'),
+    iSeq = idxFrom('职位序列'),
+    iAdj = idx0From('调整类别') >= 0 ? idx0From('调整类别') : idxFrom('调整类别'),
+    iPreL = idxFrom('职等', iAdj + 1), iPreS = idxFrom('子等级', iPreL + 1),
+    iPostL = idxFrom('职等', iPreS + 1), iPostS = idxFrom('子等级', iPostL + 1),
+    iPostSeq = idxFrom('职位序列', iPostS + 1);
+  /* kind 不看 adj 文本（写法有「跨职等1升2」「转序列职等降1级」多种），用调整前后对比推导：
+     职位序列变了 → 转序列；职等（T数字）变了 → 大职等；只有子等级（A/B/C）变 → 小职等 */
+  const kindOf = (preL, preS, postL, postS, preSeq, postSeq) =>
+    (preSeq && postSeq && preSeq !== postSeq) ? '转序列'
+      : (preL !== postL) ? '大职等'
+      : (preS !== postS) ? '小职等' : '';
+  const out = [];
+  for (let r = hi + 1; r < rows.length; r++) {
+    const row = rows[r];
+    if (!row || !lv(cellAt(row, iId))) continue;
+    const adj = iAdj >= 0 ? lv(cellAt(row, iAdj)) : '';
+    /* 审批列：从调整后信息之后扫描行内「通过/不通过」（表头标签错位，按值找才稳） */
+    let appr = '';
+    for (let c = iPostS + 1; c < row.length; c++) {
+      const v = lv(cellAt(row, c));
+      if (v === '通过' || v === '不通过') { appr = v; break; }
+    }
+    const preL = lv(cellAt(row, iPreL)), preS = lv(cellAt(row, iPreS)),
+      postL = lv(cellAt(row, iPostL)), postS = lv(cellAt(row, iPostS)),
+      preSeq = lv(cellAt(row, iSeq)), postSeq = iPostSeq >= 0 ? lv(cellAt(row, iPostSeq)) : '';
+    out.push({
+      id: lv(cellAt(row, iId)), name: lv(cellAt(row, iName)), dept: lv(cellAt(row, iDept)),
+      seq: preSeq, adj,
+      pre: preL + preS,
+      post: postL + postS,
+      kind: kindOf(preL, preS, postL, postS, preSeq, postSeq), appr,
+    });
+  }
+  return out;
 }
 
 /* ── ⑤ 本年度入职名单 ── */

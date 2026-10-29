@@ -18,6 +18,10 @@ function idbOpen() {
 function nowStamp() {
   return new Date().toLocaleString('zh-CN', { month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit' });
 }
+/* 解析逻辑版本：解析/派生口径变更（如 26H1 初/终评合并为 grade26H1）时 +1。
+   只比 packBuilt 不够——数据包没重生成、但解析逻辑改了，旧快照里的派生字段就是错的，
+   必须作废回数据包重解（2026-10-14「26H1 列丢失、24H2 多出」的根因）。 */
+const SNAP_PARSE_VER = 3; /* +1：ledger.js 新增 26H1职等晋升 解析器，旧快照无 promo 数据 */
 async function saveSnapshot() {
   try {
     const db = await idbOpen();
@@ -28,6 +32,7 @@ async function saveSnapshot() {
       /* 记下这份快照是基于哪个版本的数据包生成的：
          下次打开时如果数据包的 built 变了，说明数据更新过，就改读数据包而不是这份旧快照 */
       packBuilt: (window.HR_DATA && window.HR_DATA.built) || null,
+      parseVer: SNAP_PARSE_VER,
       savedAt: nowStamp(),
     }, 'snapshot');
     /* 必须等事务真正结束：put() 只是把请求排进队列，不 await 的话
@@ -83,7 +88,7 @@ function hasPack() {
 }
 
 /* 台账工作簿识别（汇总表里的台账 sheet，按关键字认表） */
-const LEDGER_SIGNALS = ['组织架构','人员情况','校招需求','外包名单','外包评价','入职名单','招聘未达成','储备干部','高潜','部门梯队','C型干部','校招名单','OD名单'];
+const LEDGER_SIGNALS = ['组织架构','人员情况','校招需求','外包名单','外包评价','入职名单','招聘未达成','储备干部','高潜','部门梯队','C型干部','校招名单','OD名单','B-C','职等晋升'];
 function looksLikeLedger(wb) {
   return wb.SheetNames.filter(sn => LEDGER_SIGNALS.some(s => sn.includes(s))).length >= 2;
 }
@@ -105,10 +110,13 @@ function looksLikeLedger(wb) {
      宽松匹配会把它们误当花名册。 */
 const CONSOLIDATED_NAME = BU.book;
 const isEmpSheet    = sn => /^人员数据/.test(sn);
-const isPerfSheet   = sn => /绩效考评明细/.test(sn);
+/* 绩效 sheet 两种命名（2026-10-21 表格改版）：旧「…绩效考评明细」；
+   新「干部梯队26H1绩效 · 人才梯队26H1绩效 · 25H2绩效 · 干部梯队25H1绩效 · 人才梯队25H1绩效」。
+   ⚠ 「绩效B-C人员」是台账，名字里也有「绩效」，别被这条吞进来。 */
+const isPerfSheet   = sn => /绩效考评明细|^(干部梯队|人才梯队).*绩效$|^\d{2}H\d绩效$/.test(sn);
 const isRosterSheet = sn => BU.rosterSheet.test(sn) || /花名册/.test(sn);
 const isManualSheet = sn => /^(部门编制|指标目标|月度快照|招聘计划|工作分工)$/.test(sn);
-const isLedgerSheet = sn => !/绩效考评明细/.test(sn) && LEDGER_SIGNALS.some(s => sn.includes(s));
+const isLedgerSheet = sn => !isPerfSheet(sn) && LEDGER_SIGNALS.some(s => sn.includes(s));
 function looksLikeConsolidated(wb) {
   const n = wb.SheetNames;
   /* 注意：这张表里**没有**人员数据 sheet（人员一律走 KPA 原文件），所以不能要求 isEmpSheet */
@@ -241,6 +249,7 @@ function ledgerBoardCount() {
   if (ledgerData.onboard.length) n++;
   if (ledgerData.campus27.length) n++;
   if (ledgerData.deptTier.length) n++;
+  if (ledgerData.promo.length) n++;
   return n;
 }
 
@@ -256,6 +265,7 @@ function uploadData() {
 
 /* ── 数据就绪 ── */
 async function onDataLoaded(restored) {
+  resetEmpOrder();                  // 数据重载=新的一局（rawData 可能整体被换）
   document.getElementById('page-upload').classList.add('hidden');
   document.getElementById('dashboard').classList.remove('hidden');
   buildDeptPairs();                 // 部门标签须先于筛选器填充
@@ -273,13 +283,13 @@ function lockDefaultCenter(force) {
   const hasTarget = [...sel.options].some(o => o.value === BU.code);
   if (hasTarget && (force || sel.value === 'all')) {
     sel.value = BU.code;
-    refreshFilterOptions('center');
+    refreshFilterOptions('center');   // 收尾的 selxSyncAll 会把自定义下拉的按钮文字一并刷新
   }
 }
 
-/* ── 筛选器（人群/用工合并 + 4 维互联）──
-   2026-10-13：人群与用工类型合并为一个下拉（optgroup 分组，用工值带 t: 前缀），
-   筛选栏收成一行（用户要求） */
+/* ── 筛选器（人群 + 4 维互联）──
+   2026-10-14 用户拍板：下拉只保留人群（全部/正式员工/实习生/外协OD），
+   用工类型细分项整体删除——要按用工类型看，结构分布区等页面另行承接 */
 const FILTER_DEFS = [
   { key:'group',    id:'filterGroup',    fn: d => staffGroupOf(d), labelFn: v => GROUP_LABEL[v] || v, isGroup:true },
   { key:'status',   id:'filterStatus',   fn: d => d.status },
@@ -287,10 +297,6 @@ const FILTER_DEFS = [
   { key:'dept',     id:'filterDept',     fn: d => d.deptEn || d.dept },
   { key:'location', id:'filterLocation', fn: d => d.workLocation },
 ];
-/* 't:试用期' → 所属人群；普通值原样返回（effFlowType / 结构分布区共用） */
-function groupFilterVal(g) {
-  return g && g.startsWith('t:') ? (staffGroupOf({ empType: g.slice(2) }) || 'all') : g;
-}
 function getFilterValues(excludeKey) {
   const v = { fromDate:'', toDate:'' };
   FILTER_DEFS.forEach(f => {
@@ -304,10 +310,7 @@ function getFilterValues(excludeKey) {
 function getFiltered(excludeKey) {
   const f = getFilterValues(excludeKey);
   return rawData.filter(d => {
-    if (f.group !== 'all') {
-      if (f.group.startsWith('t:')) { if (d.empType !== f.group.slice(2)) return false; }
-      else if (staffGroupOf(d) !== f.group) return false;
-    }
+    if (f.group !== 'all' && staffGroupOf(d) !== f.group) return false;
     if (f.status !== 'all' && d.status !== f.status) return false;
     if (f.center !== 'all' && d.center !== f.center) return false;
     if (f.dept !== 'all' && (d.deptEn || d.dept) !== f.dept) return false;
@@ -317,14 +320,11 @@ function getFiltered(excludeKey) {
     return true;
   });
 }
-/* 人群/用工合并下拉：optgroup 分组，值 = 人群key 或 't:用工类型' */
+/* 人群下拉：扁平三项（正式员工/实习生/外协OD），无分组无用工类型 */
 function buildGroupFilter(sel) {
   const cur = sel.value;
-  const typeVals = [...new Set(rawData.map(d => d.empType).filter(Boolean))].sort();
-  let html = '<option value="all">全部</option>' +
-    '<optgroup label="按人群">' + GROUP_ORDER.map(v => `<option value="${v}">${esc(GROUP_LABEL[v] || v)}</option>`).join('') + '</optgroup>';
-  if (typeVals.length) html += '<optgroup label="按用工类型">' + typeVals.map(v => `<option value="t:${esc(v)}">${esc(v)}</option>`).join('') + '</optgroup>';
-  sel.innerHTML = html;
+  sel.innerHTML = '<option value="all">全部</option>' +
+    GROUP_ORDER.map(v => `<option value="${v}">${esc(GROUP_LABEL[v] || v)}</option>`).join('');
   sel.value = (cur && [...sel.options].some(o => o.value === cur)) ? cur : 'all';
 }
 function populateStaticFilters() {
@@ -345,8 +345,11 @@ function refreshFilterOptions(changedKey) {
       vals.map(v => `<option value="${esc(v)}">${esc(label(v))}</option>`).join('');
     sel.value = (cur !== 'all' && vals.includes(cur)) ? cur : 'all';
   });
+  /* 选项重建后，自定义下拉件的按钮文字要跟着走（列表框本身下次打开才建） */
+  selxSyncAll();
 }
 function onFilterChange(changedKey) {
+  resetEmpOrder();   // 顶栏筛选=新的一局，明细表叠序回默认（A 规则，2026-10-14）
   refreshFilterOptions(changedKey);
   refreshAll();
 }
@@ -354,6 +357,7 @@ function resetFilters() {
   FILTER_DEFS.forEach(f => { const s = document.getElementById(f.id); if (s) s.value = 'all'; });
   document.getElementById('filterDateFrom').value = '';
   document.getElementById('filterDateTo').value = '';
+  resetEmpOrder();
   refreshFilterOptions('__init__');
   lockDefaultCenter(true);
   refreshAll();
@@ -361,9 +365,8 @@ function resetFilters() {
 function updateFilterStat() {
   const filtered = getFiltered();
   const act = filtered.filter(d => d.status === '在职');
-  const g = groupCounts(act);
   document.getElementById('filterStat').textContent =
-    `${filtered.length} 人 · 在职 ${act.length}（正${g.formal}/实${g.intern}/外${g.outsource}）· 全库 ${rawData.length}`;
+    `${filtered.length} 人 · 在职 ${act.length} · 全库 ${rawData.length}`;
 }
 
 /* ── 页面切换 ──
@@ -378,7 +381,7 @@ const PAGE_TITLES = {
   move:'人员异动',
   recruit_overview:'社招概览', recruit_need:'社招需求',
   campus_overview:'校招概览', campus_need:'校招需求', campus_track:'校招跟踪',
-  talent_hp:'高潜名单', talent_res:'储备干部', cadre_c:'C型干部',
+  talent_hp:'高潜盘点', talent_promo:'职等晋升', talent_res:'储备干部', cadre_c:'C型干部',
   perf_overview:'绩效概览', perf_review:'梯队考评', perf_alert:'绩效预警',
   outsource_overview:'外包概览', outsource_emp:'外包人员',
 };
@@ -387,7 +390,7 @@ const PAGE_GROUPS = {
   people:'people', move:'people', employee:'people',
   recruit_overview:'recruit', recruit_need:'recruit',
   campus_overview:'recruit', campus_need:'recruit', campus_track:'recruit',
-  talent_hp:'talent', talent_res:'talent', cadre_c:'talent',
+  talent_hp:'talent', talent_promo:'talent', talent_res:'talent', cadre_c:'talent',
   perf_overview:'perf', perf_review:'perf', perf_alert:'perf',
   outsource_overview:'outsource', outsource_emp:'outsource',
 };
@@ -395,15 +398,12 @@ const PAGE_GROUPS = {
 const PAGE_MULTI = { move:['turnover','ops'], perf_review:['talent'] };
 /* 未实现菜单 → 通用占位页 */
 const PLACEHOLDER_PAGES = new Set([
-  'campus_overview',
-  'talent_hp','talent_res','cadre_c',
+  'talent_res','cadre_c',
   'perf_overview','perf_alert',
   'outsource_overview','outsource_emp',
 ]);
 /* 每个占位页的说明（说明该模块将来会放什么数据，来自台账 sheet） */
 const PLACEHOLDER_DESC = {
-  campus_overview:['校招概览','26 届结果与 27 届达成的对比总览（定位待议）。', '数据来源：27届校招需求 / 26届校招名单'],
-  talent_hp:['高潜名单','人才梯队高潜认证名单（含最快晋升 T3 预测）。', '数据来源：高潜名单'],
   talent_res:['储备干部','拟任用后备干部（技储）名单，自带干部队列标注。', '数据来源：储备干部名单'],
   cadre_c:['C型干部','在任二级部门主管名单（管理通道 L1/L2）。', '数据来源：C型干部名单'],
   perf_overview:['绩效概览','B-C 人员跟踪与绩效预警总览。', '数据来源：绩效B-C人员情况'],
@@ -445,6 +445,14 @@ function switchPage(name) {
     const head = el.querySelector('.nav-group-head');
     if (head) { head.classList.toggle('active', inGroup); head.setAttribute('aria-expanded', el.classList.contains('open')); }
   });
+  /* 三级分组默认收起（2026-10-19 用户拍板）：只把当前页所在的分组展开（只开不关，
+     不动用户手动展开的其他分组），保证跳转后 active 项可见 */
+  document.querySelectorAll('.nav-sec').forEach(sec => {
+    if (!sec.querySelector('.nav-item.active') || sec.classList.contains('open')) return;
+    sec.classList.add('open');
+    const head = sec.querySelector('.nav-sec-head');
+    if (head) head.setAttribute('aria-expanded', 'true');
+  });
   if (PLACEHOLDER_PAGES.has(name)) renderPlaceholder(name);
   /* 占位页没有自己的 section，落到通用 #page-placeholder */
   const ids = PLACEHOLDER_PAGES.has(name) ? ['placeholder'] : (PAGE_MULTI[name] || [name]);
@@ -469,26 +477,27 @@ document.addEventListener('keydown', e => {
 /* ── 全局刷新 ── */
 function refreshAll() {
   if (!rawData.length) return;
-  const filtered = getFiltered();
-  const active = filtered.filter(d => d.status === '在职');
-  const allActive = rawData.filter(d => d.status === '在职');
-  /* 离职人数必须和「在职」用同一个筛选口径。
-     以前这里是 rawData（全库离职），于是「各中心编制分布」的同一根堆叠柱里，
-     在职那截是筛选后的人数、已离职那截却是全公司的人数 —— 两个数不同源 */
-  const allLeavers = filtered.filter(d => d.status === '离职');
+  const active = getFiltered().filter(d => d.status === '在职');
   const relevantAll = getScopeData();   // 不含日期/用工细筛的上下文（用于离职率分母）
   updateFilterStat();
-  renderKpiCards(active, allActive, allLeavers);
-  renderOverview(active, allActive, allLeavers, themeColors());
-  renderPeople(active, allLeavers, themeColors());
-  renderStructDist(active, themeColors());
-  renderTurnover(themeColors(), relevantAll);
-  renderOps(active, themeColors());
-  renderTalent(active, themeColors());
-  renderRecruitOverview(themeColors());
-  renderRecruitNeed(themeColors());
-  renderCampusNeed(themeColors());
-  renderCampusTrack(themeColors());
+  syncYearWinLabels();                  // 年末对比档按钮文案跟年份（较25/24/23年末）
+  /* 主题色整轮只取一次：themeColors() 要读 37 个 CSS 变量，逐页各取一次等于
+     每次筛选/切页白读 300+ 次 getComputedStyle（含隐藏页 —— 它们的 render 首行就 return）。 */
+  const tc = themeColors();
+  renderKpiCards(active);
+  renderOverview(active, tc);
+  renderPeople(active, tc);
+  renderStructDist(active, tc);
+  renderTurnover(tc, relevantAll);
+  renderOps(active, tc);
+  renderTalent(active, tc);
+  renderTalentHp();
+  renderPromo(tc);
+  renderRecruitOverview(tc);
+  renderRecruitNeed(tc);
+  renderCampusNeed(tc);
+  renderCampusOverview(tc);
+  renderCampusTrack(tc);
   renderAlerts();
   if (!document.getElementById('page-employee').classList.contains('hidden')) renderEmployeeTable();
 }
@@ -542,7 +551,7 @@ function fmtBuilt(iso) {
 /* ── 兜底：从 data/ 目录自动加载 ──
    只在「用本地 http 服务打开」时走得到这条；双击打开走数据包，不需要它。
 
-   2026-09-12 起优先读汇总表 data/<文件名已脱敏>.xlsx（一个文件装全部），
+   优先读汇总表 `BU.book`（一个文件装全部），
    读不到再按文件名认那几份原文件：
      KPA*.xls            → 人员主数据（**人员始终以这份为准**）
      *绩效考评结果汇总*.xlsx → 绩效
@@ -672,7 +681,7 @@ async function autoLoadFromDataDir() {
      想让快照作废、回到数据包：重跑 更新数据.bat 换掉 built 时间戳，再刷新页面即可。 */
   restoreSnapshot().then(async snap => {
     const packBuilt = (window.HR_DATA && window.HR_DATA.built) || null;
-    const snapStale = !!(snap && packBuilt && snap.packBuilt !== packBuilt);
+    const snapStale = !!snap && ((packBuilt && snap.packBuilt !== packBuilt) || snap.parseVer !== SNAP_PARSE_VER);
     if (snap && snap.rawData && snap.rawData.length && !snapStale) {
       /* 手工数据源独立于人员数据，先把它的状态准备好，onDataLoaded 里统一重绘 */
       if (hasPack() && window.HR_DATA.books && window.HR_DATA.books.manual) {
@@ -682,6 +691,8 @@ async function autoLoadFromDataDir() {
         loadDataSource(true);
       }
       rawData = snap.rawData; perfData = snap.perfData || {};
+      /* 自愈：旧快照缺 grade26H1（26H1 初/终评合并派生）→ 就地补算，与新解析口径对齐 */
+      Object.values(perfData).forEach(deriveGrade26H1);
       perfMeta = snap.perfMeta || { count:0, centers:[] };
       perfFileLoaded = !!snap.perfFileLoaded;
       ledgerData = snap.ledgerData || null;

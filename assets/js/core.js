@@ -15,24 +15,24 @@ let dataSavedAt = null;
 /* ═══════════════════════════════════════════════════════════════
    一、三类人群（v8 口径地基）
    公司口径「在职 N」= 已转正 + 试用期，不含实习与外协。
-   全员 = 正式 + 实习 + 外协 OD
+   全员 = 正式 + 实习 + 外协OD
    ═══════════════════════════════════════════════════════════════ */
 const STAFF_GROUPS = [
   { key:'formal',    label:'正式员工', short:'正式',  types:['已转正','试用期'] },
   { key:'intern',    label:'实习生',   short:'实习',  types:['签约实习生','非签约实习生'] },
-  { key:'outsource', label:'外协 OD',  short:'外协',  types:['外包人员','劳务人员'] },
+  { key:'outsource', label:'外协OD',  short:'外协',  types:['外包人员','劳务人员'] },
 ];
-const GROUP_LABEL = { formal:'正式员工', intern:'实习生', outsource:'外协 OD', unknown:'未分类' };
-const GROUP_SHORT = { formal:'正式', intern:'实习', outsource:'外协', unknown:'未分类' };
+const GROUP_LABEL = { formal:'正式员工', intern:'实习生', outsource:'外协OD', unknown:'未分类' };
+const GROUP_SHORT = { formal:'正式', intern:'实习', outsource:'OD', unknown:'未分类' };
 const GROUP_ORDER = ['formal','intern','outsource'];
 
 /* 口径徽标语义：formal=仅正式 · intern=含实习不含外协 · all=全员含外协 · outsource=单独看外协
    outsource 复用 all 的配色（都是最宽的灰蓝档），不新增色，只是让「筛选到外协」时徽标不说谎 */
 const SCOPE_META = {
   formal:    { label:'正式',      cls:'scope-formal', title:'口径：仅已转正 + 试用期，不含实习与外协' },
-  intern:    { label:'正式+实习', cls:'scope-intern', title:'口径：含实习生，不含外协 OD' },
-  all:       { label:'全员',      cls:'scope-all',    title:'口径：含外协 OD 的全员' },
-  outsource: { label:'外协',      cls:'scope-all',    title:'口径：仅外包人员 + 劳务人员' },
+  intern:    { label:'实习', cls:'scope-intern', title:'口径：含实习生，不含外协OD' },
+  all:       { label:'全员',      cls:'scope-all',    title:'口径：含外协OD 的全员' },
+  outsource: { label:'OD',       cls:'scope-all',    title:'口径：仅外包人员 + 劳务人员' },
 };
 
 function staffGroupOf(d) {
@@ -53,6 +53,29 @@ function groupCounts(arr) {
 }
 /* 仅正式员工 */
 function formalOnly(arr) { return arr.filter(d => staffGroupOf(d) === 'formal'); }
+
+/* ── 当前人口口径 = 顶栏「人群」下拉，全站唯一的人口收窄点 ──
+   2026-10-14 用户拍板：各页不再自己收窄人群。getScopeData() / getFiltered()
+   已经把下拉套在 rawData 上了，所以页面里再叠一层 formalOnly 就是**二次收窄**
+   ——「选了全部还是只算正式员工」就是这么来的。
+   下拉的值恰好就是 SCOPE_META 的键，所以可以直接喂给 scopeTag / scopeNote。 */
+function scopeOfFilter() {
+  const el = document.getElementById('filterGroup');
+  return (el && el.value) || 'all';
+}
+/* 徽标文案（2026-10-15 用户拍板：徽标只显示 正式/实习/OD，长名只留给顶栏下拉）。
+   旧版分长短两档，长名在徽标场景全是冗余，已统一收短 —— 参数一并撤掉，
+   留着 `scopeLabelOf(true)` 这种写法只会让人以为「true = 要长名」 */
+function scopeLabelOf() {
+  const g = scopeOfFilter();
+  return g === 'all' ? null : GROUP_SHORT[g];
+}
+/* 徽标文案（含「全部」档）：all 档没有 GROUP_LABEL，回落 SCOPE_META 的「全员」。
+   提醒条 / 内联注记这些「不管选哪档都要写个标签」的地方用这个，
+   免得各处自己写一遍 `x || SCOPE_META[scope].label` 的兜底。 */
+function scopeLabelAll() {
+  return scopeLabelOf() || (SCOPE_META[scopeOfFilter()] || SCOPE_META.all).label;
+}
 
 /* 口径徽标：KPI 卡右上角 */
 function scopeTag(scope, labelOverride) {
@@ -93,15 +116,11 @@ const FIELD_MAP = {
 /* 重复列组最多出现 6 次（本版 KPA 实测），兜底扫描 8 层 */
 const DUP_SCAN = 8;
 
-/* ── 员工类别（6 类全收）── */
-const EMP_TYPES = ['已转正','试用期','签约实习生','非签约实习生','外包人员','劳务人员'];
-const EMP_TYPE_COLORS = ['--type-permanent','--type-probation','--type-intern-paid','--type-intern-unpaid','--type-outsource','--type-labor'];
-
 /* ── 绩效周期（动态取用，只用半年度等级）── */
 const PERIOD_ORDER = [
-  ['grade2024M','2024中'], ['grade2024Y','2024终'],
-  ['grade2025M','2025中'], ['grade2025Y','2025终'],
-  ['initGrade','2026H1初评'], ['finalGrade','2026H1终评'],
+  ['grade2024M','24H1'], ['grade2024Y','24H2'],
+  ['grade2025M','25H1'], ['grade2025Y','25H2'],
+  ['grade26H1','26H1'],   // 26H1 只取终评（初评不读，见 deriveGrade26H1）
 ];
 const GRADE_NUM = {'SA':5,'S':5,'A':4,'B+':3.5,'B':3,'B-':2,'C':1,'D':0};
 /* 顺序即图表里的档位顺序。S 与 SA 同为最高档，KPA 实测确实存在（2026H1 终评 6 人）：
@@ -122,6 +141,11 @@ function availablePeriods() {
     return false;
   });
   return _avCache;
+}
+/* 最近 n 期、最新在最左。人员明细的动态绩效列与梯队高潜表共用这一处，
+   两处各写一遍 slice(-3).reverse() 的话，以后改期数就会一边 3 期一边 5 期 */
+function recentPeriods(n) {
+  return availablePeriods().slice(-(n || 3)).reverse();
 }
 /* 某员工最新非空绩效等级 */
 function latestGrade(p) {
@@ -193,19 +217,55 @@ function parseExcelDate(val) {
 }
 function toDate(v){ if(!v) return null; const d = new Date(v); return isNaN(d.getTime()) ? null : d; }
 
-/* ── 试用期届满日估算（唯一实现，pages/alerts 全走这里）──
-   口径（用户拍板 2026-10-12）：试用期 3-6 个月，一律按 6 个日历月算。
-   有「试用届满日期」原字段用原值；缺的按 入职日期+6个月 */
-function estProbEndOf(d) {
-  let p = toDate(d.probationEnd);
-  if (!p) {
-    const j = toDate(d.joinDate);
-    if (j) { p = new Date(j); p.setMonth(p.getMonth() + 6); }
-  }
-  return p;
+/* ── 试用期届满日（唯一实现，pages/alerts 全走这里）──
+   口径（2026-10-15 用户澄清数据语义）：KPA「试用届满日期」= 实际转正日期（真人真事）；
+   「转正日期」列 = 系统按入职日期推导的预定转正日（多为入职+6月，另有 1-2 月历史口径）。
+   取值链：试用届满日期(实际) → 转正日期(预定) → 入职+6个月(兜底，试用期 3-6 月按 6 算)。
+   ⚠ 不能跳过预定转正日直接算入职+6：实测 229 名试用期员工里 21 人预定 29~61 天届满，
+   盲算 +6 会把 90 天内届满/逾期预警整体算晚 4~5 个月 */
+/* 试用期届满日的唯一解析器。priority 只决定先看哪一支，取值链本身只写一处：
+     'actual'（转正队列）  试用届满日期(实际) → 转正日期(预定) → 入职+6月
+     'plan'  （转正日历 / 届满提醒）转正日期(预定) → 试用届满日期(实际) → 入职+6月
+   两档的优先级不同是有意的，见下面两个包装函数的说明 —— 但「哪几支、怎么兜底」不该各写一遍。 */
+function probEndOf(d, priority) {
+  const actual = toDate(d.probationEnd), plan = toDate(d.confirmDate);
+  const p = priority === 'plan' ? (plan || actual) : (actual || plan);
+  if (p) return p;
+  const j = toDate(d.joinDate);
+  if (!j) return null;
+  const e = new Date(j); e.setMonth(e.getMonth() + 6);
+  return e;
 }
-function calcTenure(jd) { const d = toDate(jd); if (!d) return 0; return (Date.now()-d.getTime())/(365.25*86400000); }
+function estProbEndOf(d) { return probEndOf(d, 'actual'); }
+/* 转正日历 / 试用届满提醒的取数（2026-10-16 用户拍板）：
+   试用期在册的人「预定转正日」(confirmDate) 100% 有值，直接用它，不估算；
+   confirmDate 缺失才回落 estProbEndOf（入职+6月兜底，展示时标 *）。
+   转正率队列不用它——已转正的人有实际转正日 (probationEnd)，那个更准 */
+function probEndPlanOf(d) { return probEndOf(d, 'plan'); }
+/* 司龄（年）。untilMs：截止时间戳——离职员工要算到离职日而非今天
+   （2026-10-15 用户报某人司龄 bug：1月入职7月离职却显示 0.8年=算到今天）。
+   在职人群（KPI/图表/预警）一律不传=今天截止，行为不变 */
+function calcTenure(jd, untilMs) {
+  const d = toDate(jd); if (!d) return 0;
+  const end = untilMs != null ? toDate(untilMs) : null;
+  return ((end ? end.getTime() : Date.now()) - d.getTime()) / (365.25 * 86400000);
+}
+/* 明细表司龄：离职员工算到离职日，在职算到今天（KPI/图表/预警仍走 calcTenure 原语义） */
+function empTenure(d) {
+  return calcTenure(d.joinDate, d.status === '离职' && d.leaveDate ? d.leaveDate : null);
+}
 function daysBetween(a, b) { return Math.round((b - a) / 86400000); }
+/* 两个日期间的**完整日历月数**（不满一个月的天数不计数）。
+   「不足 N 个月」一类口径一律用它，别用 天数/30 或 年分数——
+   365.25 天算出的 0.5 年=182.6 天，会把「恰满 6 个日历月」误判成不足 6 个月
+   （实例：2026-01-05→2026-07-05 是整 6 个月，181 天 < 182.6 天被算成 <6 月）。 */
+function fullMonthsBetween(a, b) {
+  const j = toDate(a), l = toDate(b);
+  if (!j || !l) return null;
+  let m = (l.getFullYear() - j.getFullYear()) * 12 + (l.getMonth() - j.getMonth());
+  if (l.getDate() < j.getDate()) m--;          // 结束日没到入职日的「号数」→ 最后一个月不满
+  return m < 0 ? 0 : m;
+}
 
 /* 合同类型兜底：KPA 实测该列绝大多数为空，空值按用工类别推断 */
 function inferContractType(empType) {
@@ -257,10 +317,25 @@ function parseRow(row) {
   return r;
 }
 
-/* ── 绩效工作簿解析（多文件多 sheet，按表头自动识别；只用半年度等级）── */
+/* 26H1 只认**终评**（2026-10-14 用户纠正：初评不是最终结果；
+   2026-10-21 再明确：表头叫「2026H1初评绩效等级」的列干脆不读）。
+   「最近 3 期」这类口径不该把同一期的初评/终评拆成两期。
+   解析（parsePerfWorkbook）与旧快照自愈（data.js）共用这一处，
+   免得两边的合并规则各写一份、日后改口径只改到一边。 */
+function deriveGrade26H1(rec) {
+  if (rec.finalGrade) rec.grade26H1 = rec.finalGrade;
+  return rec;
+}
+
+/* ── 绩效工作簿解析（多文件多 sheet，按表头自动识别；只用半年度等级）──
+   解析顺序决定「同一期在两个表里都有值时谁说了算」：**按期间单独成表的（`25H2绩效`）最后读**，
+   让它盖过 26H1 表里带的同名列。理由是那张表专门维护该期、覆盖人数也更多（191 vs 176）。
+   排序写死在这里、不依赖 Excel 里的 sheet 先后——用户重排一下表页不该悄悄改变数据。 */
+function perfSheetRank(sn) { return /^\d{2}H\d绩效$/.test(sn) ? 1 : 0; }
 function parsePerfWorkbook(wb) {
   let count = 0;
-  for (const sn of wb.SheetNames) {
+  const names = (wb.SheetNames || []).slice().sort((a, b) => perfSheetRank(a) - perfSheetRank(b));
+  for (const sn of names) {
     const ws = wb.Sheets[sn];
     const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
     if (!rows || rows.length < 4) continue;
@@ -272,15 +347,32 @@ function parsePerfWorkbook(wb) {
     const H = rows[headerRow].map(h => (h||'').toString().replace(/\s+/g,' ').trim());
     const idx = n => H.indexOf(n);
     const idxInc = sub => H.findIndex(h => h.includes(sub));
+    /* 多条件匹配：所有子串都出现才算。用来把「2025年H1终评绩效等级」和「2026H1 终评绩效等级」
+       分开——单条件 idxInc('终评') 会先命中左边第一个，25H1 那张表因此被当成 26H1（等级串期）。 */
+    const idxAll = (...subs) => H.findIndex(h => subs.every(s => h.includes(s)));
+    /* 按序取第一个存在的精确列名，都没有才用 fallback —— 一列名一行，省掉同名列查两遍 */
+    const pick = (names, fallback) => {
+      for (const n of names) { const i = idx(n); if (i >= 0) return i; }
+      return fallback;
+    };
     const iEmpId = idx('工号'), iName = idx('姓名'), iCenter = idx('中心');
     const iLevel = idx('职等'), iSub = idx('子职等'), iTier = idx('梯队类型');
-    const iInit = idx('2026H1初评绩效等级') >= 0 ? idx('2026H1初评绩效等级') : idxInc('初评');
-    const iFinal = idx('2026H1 终评绩效等级') >= 0 ? idx('2026H1 终评绩效等级') : idxInc('终评');
-    const iChange = idx('近半年绩效变动') >= 0 ? idx('近半年绩效变动') : idxInc('绩效变动');
-    const iCoeff = idx('工时投入系数') >= 0 ? idx('工时投入系数') : idxInc('投入系数');
-    const iBracket = idx('投入系数分档') >= 0 ? idx('投入系数分档') : idxInc('投入分档');
-    const iOrgScore = idx('组织建设评分') >= 0 ? idx('组织建设评分') : idxInc('组织建设评分');
-    const iOrgBracket = idx('组织建设分档') >= 0 ? idx('组织建设分档') : idxInc('组织分档');
+    /* 26H1 **只读「终评」**：初评不是最终结果，用户 2026-10-21 明确「有 2026H1初评绩效等级的列
+       不要管，以终评绩效等级为准」。锚定 2026 也是必须的——同一份工作簿里还躺着
+       「2025年H1初评/终评绩效等级」两张表，光认「初评/终评」会串期。 */
+    const iFinal = pick(['2026H1 终评绩效等级', '2026H1终评绩效等级'], idxAll('2026', '终评'));
+    /* 25H1 / 25H2 各有两种列名（2026-10-21 表格改版后）：
+       26H1 那两张写「2025年中 / 2025年终」、25H1 那两张写「2025年H1终评绩效等级」、
+       25H2 那张写「2025年终评绩效等级」。
+       ⚠️ 全站一条硬规则：**初评一律不读，只认终评**（2026-10-21 用户两次强调）。
+          所以这里没有「找不到终评就退到初评」的兜底——那正是用户不要的东西。 */
+    const i25M = pick(['2025年中'], idxAll('2025', 'H1', '终评'));
+    const i25Y = pick(['2025年终'], idxAll('2025', '年终评'));
+    const iChange = pick(['近半年绩效变动'], idxInc('绩效变动'));
+    const iCoeff = pick(['工时投入系数'], idxInc('投入系数'));
+    const iBracket = pick(['投入系数分档'], idxInc('投入分档'));
+    const iOrgScore = pick(['组织建设评分'], idxInc('组织建设评分'));
+    const iOrgBracket = pick(['组织建设分档'], idxInc('组织分档'));
     const iRank = idxInc('推荐排名');
     if (iEmpId < 0) continue;
 
@@ -295,14 +387,15 @@ function parsePerfWorkbook(wb) {
       put('name', iName); put('center', iCenter); put('level', iLevel);
       put('subLevel', iSub); put('tierType', iTier);
       put('grade2024M', idx('2024年中')); put('grade2024Y', idx('2024年终'));
-      put('grade2025M', idx('2025年中')); put('grade2025Y', idx('2025年终'));
-      put('initGrade', iInit); put('finalGrade', iFinal);
+      put('grade2025M', i25M); put('grade2025Y', i25Y);
+      put('finalGrade', iFinal);
       put('gradeChange', iChange); put('inputBracket', iBracket);
       put('orgScore', iOrgScore); put('orgBracket', iOrgBracket); put('rank', iRank);
       if (iCoeff >= 0) { const n = parseFloat(row[iCoeff]); if (!isNaN(n)) rec.inputCoeff = n; }
-      ['grade2024M','grade2024Y','grade2025M','grade2025Y','initGrade','finalGrade'].forEach(k => {
+      ['grade2024M','grade2024Y','grade2025M','grade2025Y','finalGrade'].forEach(k => {
         if (rec[k]) rec[k] = rec[k].toString().trim();
       });
+      deriveGrade26H1(rec);
       perfData[empId] = rec;
       count++;
     }
@@ -395,18 +488,50 @@ function countByMonth(data, dateKey, months) {
     if (m.hasOwnProperty(key)) m[key]++; });
   return months.map(k => m[k]);
 }
-/* 每月末在册人数（含在职与已离职历史） */
-function headcountAt(data, endMs) {
-  return data.filter(d => {
-    const j = toDate(d.joinDate); if (!j || j.getTime() > endMs) return false;
-    const l = toDate(d.leaveDate); if (l && l.getTime() <= endMs) return false;
-    return true;
-  }).length;
+/* 入离职趋势图上「点某个月」筛谁：该月入职的 + 该月离职的，两拨合在一起。
+   两条线在同一个月份上是一件事的两面，按「点的是哪条线」分会让人在
+   「我点的那条线上的点算不算」上纠结（2026-10-15 用户拍板合并）。
+   总览页与人员概览页共用同一个谓词，两处不各写一份。 */
+function trendMonthFilter(m) {
+  return d => !!((d.joinDate && d.joinDate.indexOf(m) === 0) || (d.leaveDate && d.leaveDate.indexOf(m) === 0));
 }
-function kpi(label, value, sub, colorVar, scope, scopeLabel) {
+/* 每月末在册人数（含在职与已离职历史） */
+/* 「某时点在册几人」。每人两个日期解析一次，供需要反复求同一批人在不同时点的
+   在册数的调用方复用（区间对比要按年各算 12 个月末 = 上百次），
+   否则每次都要把全表重扫一遍、每人重新 new Date 两次。
+   pairs = [[入职ms, 离职ms|null], ...]（缺入职日的行不参与，与 headcountAt 一致） */
+function tenurePairsOf(data) {
+  const out = [];
+  for (const d of data) {
+    const j = toDate(d.joinDate);
+    if (!j) continue;
+    const l = toDate(d.leaveDate);
+    out.push([j.getTime(), l ? l.getTime() : null]);
+  }
+  return out;
+}
+function headcountAtMs(pairs, endMs) {
+  let n = 0;
+  for (const p of pairs) if (p[0] <= endMs && (p[1] == null || p[1] > endMs)) n++;
+  return n;
+}
+function headcountAt(data, endMs) { return headcountAtMs(tenurePairsOf(data), endMs); }
+/* 「点这张卡 → 人员明细带名单」的属性组。KPI 卡与人群概览卡共用 ——
+   手写两遍最容易漏掉键盘那两条（Enter / 空格），漏了就等于这两个能力对键盘用户不可达。 */
+function clickCardAttrs(cls, label, jumpKey) {
+  return `class="${cls} clickable" role="button" tabindex="0" aria-label="查看「${esc(label)}」名单"` +
+    ` onclick="jumpToDetail('${jumpKey}')"` +
+    ` onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();jumpToDetail('${jumpKey}')}"`;
+}
+function kpi(label, value, sub, colorVar, scope, scopeLabel, jumpKey) {
   const dot = colorVar ? `<span class="kpi-dot" style="--tone:var(${colorVar})"></span>` : '';
   const tag = scope ? scopeTag(scope, scopeLabel) : '';
-  return `<div class="kpi-card"><div class="kpi-label">${dot}${label}${tag}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub||''}</div></div>`;
+  /* jumpKey：人数型卡片点击 → 人员明细带筛选名单（jumpToDetail 体系）。
+     比率/均值卡（离职率、司龄、转正率）不传，不可点 */
+  const open = jumpKey
+    ? `<div ${clickCardAttrs('kpi-card', label, jumpKey)}>`
+    : '<div class="kpi-card">';
+  return `${open}<div class="kpi-label">${dot}${label}${tag}</div><div class="kpi-value">${value}</div><div class="kpi-sub">${sub||''}</div></div>`;
 }
 /* CSV 文本：BOM + 表头 + 数据行。**每格一律加引号**——值里带逗号 / 引号 / 换行都不会串列，
    换行用 CRLF（Excel 最认这个）；单元格内的换行压成空格，免得一行数据在 Excel 里占多行。
@@ -439,6 +564,12 @@ function gradeTag(grade) {
   const r = gradeRung(grade);
   return `<span class="tag ${r ? 'tag-grade-' + r : ''}">${esc(grade)||'—'}</span>`;
 }
+/* 在职 / 离职药丸：员工明细表与梯队页的明细表共用一处标记，换色或加图标只改这里 */
+function statusTag(d) {
+  return d.status === '在职'
+    ? '<span class="tag tag-active">在职</span>'
+    : '<span class="tag tag-inactive">离职</span>';
+}
 
 /* ── 主题（localStorage 持久化）── */
 function syncThemeBtn() {
@@ -468,7 +599,13 @@ function cssMs(name, fallback) {
 function reduceMotion() {
   return !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 }
+/* 按主题缓存：这里的值只随 data-theme 变（全库没有 setProperty 之类的运行期覆盖）。
+   每建一张图都要用一份，而单张页面多则 15 张图 —— 各自读 35 个变量等于 500+ 次
+   getComputedStyle。缓存命中时是纯返回。 */
+let _themeColors = null, _themeColorsKey = null;
 function themeColors() {
+  const th = document.documentElement.getAttribute('data-theme') || 'light';
+  if (_themeColors && _themeColorsKey === th) return _themeColors;
   const tc = {};
   ['--ink','--ink-2','--ink-3','--gridline','--surface','--surface-2','--border','--accent','--accent-strong','--accent-soft',
    '--s1','--s2','--s3','--s4','--s5','--s6',
@@ -478,6 +615,7 @@ function themeColors() {
    /* 公司语义色：pos 红=好 · neg 绿=不好 · warn 黄=警告 */
    '--pos','--neg','--warn']
     .forEach(v => tc[v.slice(2)] = getCSS(v));
+  _themeColors = tc; _themeColorsKey = th;
   return tc;
 }
 
@@ -492,21 +630,30 @@ let CHART_DEFAULTS = null;
    横条时数值画在条尾：放不下（右侧超 85% 宽）就画条内白字。 */
 const BAR_VALUE_CFG = new Map();   // chart.id → { display, format }
 /* 条内文字的两个候选墨色 + 条底亮度判据。
-   ⚠️ 不能用「白字」写死：深色模式下条底是提亮过的浅色（--s1 是 #60a5fa），
+   ⚠️ 不能用「白字」写死：深色模式下条底是提亮过的浅色（--s1 是 #3186ff），
       白字落在上面读不清。--surface / --ink 这两支正好随主题翻转，
       所以「条底亮 → 取 --surface，条底暗 → 取 --ink」在两个主题下都成立。
    这两个值按主题缓存：afterDatasetsDraw 每帧都跑，getComputedStyle 不能每帧读。 */
-let _barInk = null, _barInkTheme = null;
-function barInks() {
+/* 主题相关小色组的统一缓存：值只随 data-theme 变，而绘制回调每帧都跑。
+   加新的一组色就再调一次 themeCached()，别复制「比对主题 → 重建」这段（barInks/ringInks
+   曾经各写了一份，主题切换的失效逻辑也得跟着抄两遍）。 */
+const _themeCache = new Map();
+function themeCached(key, build) {
   const th = document.documentElement.getAttribute('data-theme') || 'light';
-  if (_barInkTheme !== th || !_barInk) {
-    _barInk = {
-      onLightBar: (typeof getCSS === 'function' && getCSS('--ink')) || '#0d1b2a',
-      onDarkBar:  (typeof getCSS === 'function' && getCSS('--surface')) || '#ffffff',
-    };
-    _barInkTheme = th;
-  }
-  return _barInk;
+  const hit = _themeCache.get(key);
+  if (hit && hit.th === th) return hit.val;
+  const val = build();
+  _themeCache.set(key, { th, val });
+  return val;
+}
+function barInks() {
+  return themeCached('bar', () => ({
+    onLightBar: getCSS('--ink') || '#0d1b2a',
+    onDarkBar:  getCSS('--surface') || '#ffffff',
+    /* 数值文字自己的墨色也并进来：它同样每帧要用，此前单独 getCSS 一次，
+       正好抵消了本缓存的用意 */
+    ink2:       getCSS('--ink-2') || '#666',
+  }));
 }
 /* 相对亮度（sRGB 近似）：只用来在「深墨 / 浅墨」里二选一，不做 WCAG 精确计算。
    认不出来的颜色（渐变对象等）返回 1 → 当深底，走旧行为（白字）。 */
@@ -535,12 +682,10 @@ const BAR_VALUE_PLUGIN = {
     const { ctx } = chart;
     /* 只取这几支 CSS 变量：themeColors() 要读 40 个变量，而 afterDatasetsDraw
        在动画/悬停/重排的每一帧都跑，整份读一遍是纯浪费 */
-    const ink2 = (typeof getCSS === 'function' && getCSS('--ink-2')) || '#666';
     const inks = barInks();
+    const ink2 = inks.ink2;
     ctx.save();
-    /* 字号跟 --fs-10 走；字体串只在首次拼一次（字号不随主题变，可以缓存） */
-    if (!_barFont) _barFont = `600 ${(typeof getCSS === 'function' && getCSS('--fs-10')) || '10px'} "Noto Sans SC", sans-serif`;
-    ctx.font = _barFont;
+    ctx.font = chartFont().v;
     chart.data.datasets.forEach((ds, di) => {
       const meta = chart.getDatasetMeta(di);
       if (meta.hidden) return;
@@ -567,7 +712,268 @@ const BAR_VALUE_PLUGIN = {
     ctx.restore();
   },
 };
-let _barFont = null;
+/* 图表字号 / 字体串的唯一来源：柱顶数值（BAR_VALUE_PLUGIN）、环形标注（RING_LABEL_PLUGIN）、
+   坐标轴刻度与图例（tickFontSize）全走这里。字体族与字重约定只写一处。
+   字号不随主题变（--fs-12 是静态令牌），拼一次缓存即可 ——
+   chartDefaults 每次建图都跑、40+ 张图逐个 getComputedStyle 是纯浪费。 */
+let _chartFont = null;
+function chartFont() {
+  if (_chartFont) return _chartFont;
+  const size = getCSS('--fs-12') || '12px';
+  const n = parseFloat(size);
+  /* 字族取 --font 令牌，不写死：改令牌时图表里的字要跟着页面一起变，
+     否则页面换了字体、图里还是旧的那套（画布文字不受 CSS 继承影响） */
+  const fam = getCSS('--font') || '"Noto Sans SC", sans-serif';
+  return (_chartFont = {
+    size: isFinite(n) ? n : 12,
+    v: `600 ${size} ${fam}`,   // 柱顶数值 / 环形人数
+    p: `400 ${size} ${fam}`,   // 环形占比
+    lineH: (isFinite(n) ? n : 12) * 1.2,
+  });
+}
+/* 坐标轴刻度 / 图例字号 = 全站最小档 --fs-12。10px 那一档已在 v8.10 撤掉，
+   图表这边是最后的漏网之鱼（2026-10-15 补齐，别再把 10 写回来）。 */
+function tickFontSize() { return chartFont().size; }
+
+/* ── 环形 / 饼图外置标注：引导线 + 「类别名 / 人数 (占比)」两行（2026-10-15 用户要求）──
+   Chart.js 只把数值放进 tooltip —— 不悬停就看不到。这里在弧面外画引导线 + 名称 + 数值。
+   横向空间不会自己让出来：先量出最长的一条标签，再从 layout.padding 左右各让出这么多，
+   否则文字压在环面上（见 ringLabelPad）。
+   ⚠️ 标签排两行而不是一行：卡片内容宽只有 312px，单行标签会把环半径
+      压到 60px 出头、环缩成一小圈；拆两行后让出的宽度只由**较长那行**决定。
+   ⚠️ 字号必须跟 --fs-12 走、且两边用同一份缓存：量宽度用的字体和画的时候不是同一个，
+      留出的空间就会对不上（差一点就被截断）。 */
+const RING_LEADER = 16;   // 弧面外那段斜线的水平长度
+const RING_GAP = 6;       // 斜线末端到文字的留白
+/* 图例一条占的固定开销：色块（boxWidth 6，usePointStyle 时是那个小圆点）+ 色块到文字的间隙
+   + 条目两侧内距。Chart.js 的 _fitRows 判「这一行还放不放得下」用的是
+   `boxWidth + fontSize/2 + 文字宽 + 2×padding`，按我们的档位（6 + 12/2 + 2×10）= 32。
+   ⚠️ 图例**不会折行**（理由见 labelBudget），所以这 32px 是硬开销，不能省。 */
+const RING_LEGEND_CHROME = 32;
+/* 折行的下限：再挤也不把名称折到比这更窄 —— 一行只剩两三个字，读起来比被裁还难受。 */
+const RING_MIN_LABEL_W = 48;
+/* 一块标注最多排几行。目标形态是「名称（最多两行）+ 人数 (占比)（一行）」= 三行；
+   再多，几块挤在同一侧时就会互相压住（转正与合同页 5 块实测）。 */
+const RING_LABEL_LINES = 3;
+/* ⚠️ 人数行**必须**一行 —— 判据是「名称 ≤ 2 行 且 人数 = 1 行」，不是「整块 ≤ 3 行」。
+   写成「整块 ≤ 3 行」的话，「男 / 266 人 / (84.4%)」也算合格，二分就会一路缩到下限，
+   把一行本来放得下的短名称也拆成两行。 */
+const RING_PCT_LINES = 1;
+/* 二分找最小预算的上界：比任何真实标签都宽，到这个宽度必然「名称一行 + 人数一行」。 */
+const RING_MAX_LABEL_W = 400;
+/* 环形标注的三支颜色按主题缓存（与 barInks 同一套理由）：
+   afterDatasetsDraw 每帧都跑，getComputedStyle 不能每帧读。 */
+function ringInks() {
+  return themeCached('ring', () => ({
+    name: getCSS('--ink-2') || '#555',   // 类别名（第 1 行）
+    pct:  getCSS('--ink-3') || '#888',   // 人数+占比（第 2 行）
+    line: getCSS('--ring-leader') || '#9db0c6',   // 引导线
+  }));
+}
+/* 量文字宽度用的离屏画布：只在建图时用，不进 DOM */
+let _mctx = null;
+function measureCtx() { return _mctx || (_mctx = document.createElement('canvas').getContext('2d')); }
+/* 标签两段：**类别名** + 「人数 (占比)」。占比精度与 tooltip 一致（1 位小数），两处不能各写一个。
+   2026-10-15 用户两轮反馈收敛到这个形态：
+     第一轮「图例写完整：女: 49 人 (15.6%)」→ 更正为「图例还原，是引导线指着的数字要写完整」；
+     第二轮「对应的类别也要写上，现在只写了数字和比例」。
+   所以：**图例只留名称，名字 + 数字都挂在引导线上**。
+   两段而不是一行「离职替补 11 人 (36.7%)」的原因见 ringLabelPad：卡片内容宽只有 312px，
+   单行会把环半径压掉三分之一。拆开后，让出空间的宽度由**较长的那段**决定。 */
+/* 占比串，精度 1 位小数。标注与环形图 tooltip 共用这一处 ——
+   两处各写一个 toFixed(1) 的话，改精度必然漏掉一边。 */
+function ringPct(v, total) { return (v / total * 100).toFixed(1) + '%'; }
+/* 把一段文字折成「每行都不超过 budget」的若干行。放得下就原样一行，不硬折。
+   有空格按空格断（拉丁名 / 「176 人 (55.3%)」），没有空格按字缝均分（中文）。 */
+function wrapRingText(s, budget, font) {
+  const txt = String(s == null ? '' : s);
+  if (!txt) return [''];
+  const c = measureCtx();
+  c.font = font;
+  if (c.measureText(txt).width <= budget) return [txt];
+  const toks = txt.split(/\s+/).filter(Boolean);
+  if (toks.length > 1) {
+    const lines = []; let cur = '';
+    toks.forEach(t => {
+      const cand = cur ? cur + ' ' + t : t;
+      if (cur && c.measureText(cand).width > budget) { lines.push(cur); cur = t; } else cur = cand;
+    });
+    if (cur) lines.push(cur);
+    return lines.flatMap(t => c.measureText(t).width <= budget ? [t] : splitEven(t, budget, c, font));
+  }
+  return splitEven(toks[0], budget, c, font);
+}
+/* 无空格可依（中文）时的兜底：先按「总宽 ÷ 预算」估出行数，再**等分字缝**，
+   取第一个每行都放得下的行数。等分而不是贪心，是为了不留下「同」这种孤字。 */
+function splitEven(s, budget, c, font) {
+  c.font = font;
+  const total = c.measureText(s).width;
+  if (total <= budget) return [s];
+  for (let n = Math.max(2, Math.ceil(total / budget)); n <= s.length; n++) {
+    const per = s.length / n, lines = [];
+    for (let k = 0; k < n; k++) lines.push(s.slice(Math.round(k * per), Math.round((k + 1) * per)));
+    if (lines.every(t => t && c.measureText(t).width <= budget)) return lines;
+  }
+  return [s];   // budget 比一个字还窄，交给上层（RING_MIN_LABEL_W 兜着，正常走不到）
+}
+/* 标注行：**名称 + 「人数 (占比)」**，各自按 budget 折行。
+   2026-10-16 起是「名称折、人数也折」—— 起因是转正与合同页的「无固定期限劳动合同」
+   9 字 ≈108px，光折名称救不回图例（见 labelBudget 里那段推导）。
+   ⚠️ 每行带自己的字体与语义（pct 只是「这行是人数行」的标记，画的时候据此选颜色），
+      别再靠「最后一行是人数」这条位置约定 —— 折行后最后一行可能是「(55.3%)」。 */
+function ringLabelLines(v, total, name, budget) {
+  const f = chartFont();
+  return [
+    ...wrapRingText(name, budget, f.v).map(t => ({ t, f: f.v, pct: false })),
+    ...wrapRingText(`${+v} 人 (${ringPct(+v, total)})`, budget, f.p).map(t => ({ t, f: f.p, pct: true })),
+  ];
+}
+/* 一行标注文字最多能占多少像素 = 让每一块都排成「名称最多两行 + 人数一行」的**最小**宽度。
+   取最小值而不是「越大越好」：预算越小 → 让出的宽度越小 → 环越大；只要行数不超上限，
+   窄一点总是更划算。行数随预算单调不增，所以直接二分。
+   ⚠️ 这里**不看画布宽**。曾经按「图例也得放得下」反推过一版，结果量宽与画字用了两个
+      不同的宽度（建图那一刻 el.clientWidth 是 canvas 的固有尺寸 300，Chart.js 铺开后才
+      是容器真宽 312），让出的空间和实际文字差十几像素，末尾被画布裁掉。
+      现在预算只由**文字本身**决定，量宽与画字必然一致。图例放不放得下另判（见 makeChart）。 */
+/* 折行阈值的结果只取决于「各块人数 + 名称」，而 RING_LABEL_PLUGIN 是**每帧**调它
+   （入场动画、每次 hover 重绘）。12 步二分 × 每块 measureText 跑一帧几次太浪费，
+   按输入缓存 —— 字号是静态令牌（见 chartFont），不需要跟主题失效。 */
+const _ringBudgetCache = new Map();
+function labelBudget(data, labels) {
+  const ck = (labels || []).join('\u0001') + '\u0002' + data.join(',');
+  if (_ringBudgetCache.has(ck)) return _ringBudgetCache.get(ck);
+  const total = data.reduce((a, b) => a + (+b || 0), 0);
+  const fits = budget => {
+    let ok = true;
+    data.forEach((v, i) => {
+      if (!ok || !(+v)) return;
+      const ls = ringLabelLines(v, total, (labels || [])[i], budget);
+      const pct = ls.filter(x => x.pct).length;
+      if (pct > RING_PCT_LINES || ls.length > RING_LABEL_LINES) ok = false;
+    });
+    return ok;
+  };
+  let lo = RING_MIN_LABEL_W, hi = RING_MAX_LABEL_W;
+  for (let k = 0; k < 12; k++) {
+    const mid = (lo + hi) / 2;
+    if (fits(mid)) hi = mid; else lo = mid;
+  }
+  if (_ringBudgetCache.size > 64) _ringBudgetCache.clear();   // 页面数据轮换后别无限长
+  _ringBudgetCache.set(ck, hi);
+  return hi;
+}
+/* 图例要占多宽：最宽的一条 + 色块与内距。Chart.js 的图例**不折行**（见 makeChart），
+   所以这是一条硬底线 —— 放不下就得把图例去掉，不能指望它自己缩。 */
+function legendNeedW(labels) {
+  const c = measureCtx();
+  c.font = chartFont().p;
+  let w = 0;
+  (labels || []).forEach(t => { w = Math.max(w, c.measureText(String(t == null ? '' : t)).width); });
+  return w + RING_LEGEND_CHROME;
+}
+/* 这张环形图左右各要让出多少像素。没有块或合计为 0 → 不画、不让空间。
+   ⚠️ 2026-10-15 起**一块也画**（原先 `length < 2` 就退出）。当时不画的理由是
+   「100.0% 是废话，图例已经说明」——但数字已从图例挪到标注上，再退出就等于
+   整张图一个数字都没有（「前/中/后台」只有中台一块时就是这样）。
+   多出的那行 100.0% 是冗余，但比「什么都没有」强。 */
+function ringLabelPad(data, labels) {
+  const total = data.reduce((a, b) => a + (+b || 0), 0);
+  if (!data.length || !total) return 0;
+  const c = measureCtx();
+  const budget = labelBudget(data, labels);
+  let w = 0;
+  data.forEach((v, i) => {
+    if (!(+v)) return;
+    ringLabelLines(v, total, (labels || [])[i], budget)
+      .forEach(ln => { c.font = ln.f; w = Math.max(w, c.measureText(ln.t).width); });
+  });
+  return Math.ceil(w) + RING_LEADER + RING_GAP + 2;
+}
+const RING_LABEL_PLUGIN = {
+  id: 'ringLabels',
+  afterDatasetsDraw(chart) {
+    const meta = chart.getDatasetMeta(0);
+    const data = (chart.data.datasets[0] || {}).data || [];
+    const total = data.reduce((a, b) => a + (+b || 0), 0);
+    if (!meta || !meta.data || !meta.data.length || !total) return;   /* 一块也画，理由见 ringLabelPad */
+    const f = chartFont(), ctx = chart.ctx, area = chart.chartArea;
+    /* 折行阈值必须与 ringLabelPad 算的**完全一致**（同一份 labelBudget + 同一个宽度），
+       否则量出来让出的空间和实际画上去的文字对不上，末尾照样被截。
+       chart.width 是画布 CSS 宽，与 makeChart 里传进去的 el.clientWidth 同值。 */
+    const budget = labelBudget(data, chart.data.labels);
+    const a0 = meta.data[0], cx = a0.x, cy = a0.y, R = a0.outerRadius;
+    /* ⚠️ name 与 pct 是**文字色**（两行标注），不是引导线色 —— 别把 pct 一起删了。
+       文字要吃 4.5:1，所以仍走 --ink-2 / --ink-3；只有那条线走 --ring-leader。
+       引导线走专用的 --ring-leader（浅/深各一档，约 2.2:1），不是 --ink-3、也不是 --gridline：
+       两个极端都试过了 —— --gridline 1px 几乎看不见（「指引线可以再明显一点」），
+       换成 --ink-3（5.56:1）后又太重（「指引线颜色太深了，浅一点」）。
+       最终：**粗细留住 1.5px**（那是「看得见」的来源），**颜色降一档**。
+       线只负责把标签牵到弧面，信息在标签文字里，所以不吃 3:1 的图形门槛。 */
+    const inks = ringInks();
+    const line = inks.line, lineW = 1.5;
+
+    /* 每条弧：中点角 → 环上的出发点、左右归属、原始纵向落点 */
+    const items = [];
+    meta.data.forEach((arc, i) => {
+      const v = +data[i] || 0;
+      if (!v || arc.endAngle - arc.startAngle < 1e-4) return;
+      const mid = (arc.startAngle + arc.endAngle) / 2;
+      const py = cy + Math.sin(mid) * (R + 2);
+      const lines = ringLabelLines(v, total, (chart.data.labels || [])[i], budget);
+      items.push({
+        side: Math.cos(mid) >= 0 ? 1 : -1,
+        px: cx + Math.cos(mid) * (R + 2), py,
+        y: py, lines, h: f.lineH * lines.length,
+      });
+    });
+    /* 避让按**最高的一块**留间距：块高随名称折行数不同（2 行或 3 行），
+       统一按最大值排，保证任何两块都不叠 —— 比逐块算可变间距简单，且不会算漏。 */
+    const blockH = items.reduce((m, it) => Math.max(m, it.h), f.lineH * 2);
+
+    /* 同侧避让：按原始 y 排好 → 前向推开 → 后向推回 → 整组平移回绘图区。
+       ⚠️ 最后一步必须**整组平移**，不能逐个夹取：逐个夹会把被顶出上边界的那个
+          按回来，正好压回它下面的邻居身上（左侧顶部两条挤成一团就是这么来的）。
+       弧全部堆在同一侧时（合同类型图左侧有 4 条），可用高度可能不够，
+       所以先按可用高度把最小间距压到装得下，再排。 */
+    [1, -1].forEach(sd => {
+      const grp = items.filter(it => it.side === sd).sort((a, b) => a.y - b.y);
+      const lo = area.top + blockH / 2, hi = area.bottom - blockH / 2;
+      const gap = grp.length > 1 ? Math.min(blockH, (hi - lo) / (grp.length - 1)) : blockH;
+      for (let k = 1; k < grp.length; k++) { const d = gap - (grp[k].y - grp[k-1].y); if (d > 0) grp[k].y += d; }
+      for (let k = grp.length - 2; k >= 0; k--) { const d = gap - (grp[k+1].y - grp[k].y); if (d > 0) grp[k].y -= d; }
+      if (grp.length) {
+        const shift = grp[0].y < lo ? lo - grp[0].y
+                    : grp[grp.length - 1].y > hi ? hi - grp[grp.length - 1].y : 0;
+        if (shift) grp.forEach(it => { it.y += shift; });
+      }
+    });
+
+    ctx.save();
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = lineW;
+    ctx.lineCap = 'round';
+    ctx.strokeStyle = line;
+    items.forEach(it => {
+      const ex = cx + it.side * (R + RING_LEADER);
+      const tx = ex + it.side * RING_GAP;
+      ctx.beginPath();
+      ctx.moveTo(it.px, it.py);
+      ctx.lineTo(ex, it.y);
+      ctx.stroke();
+      ctx.textAlign = it.side > 0 ? 'left' : 'right';
+      /* 整块以 it.y 为中心竖排：名称若干行（600 / --ink-2）在前，人数行（400 / --ink-3）
+         在后。行自己带字体与语义（见 ringLabelLines），这里不猜「哪一行是人数行」。
+         两行时算出来的落点与旧版逐行写死的 y ∓ lineH/2 完全一致。 */
+      const y0 = it.y - it.h / 2;
+      it.lines.forEach((ln, k) => {
+        ctx.font = ln.f;
+        ctx.fillStyle = ln.pct ? inks.pct : inks.name;
+        ctx.fillText(ln.t, tx, y0 + f.lineH * (k + 0.5));
+      });
+    });
+    ctx.restore();
+  },
+};
 /* 动效三值只读一次：令牌是静态的、系统 reduced-motion 也不会中途变，
    没必要每建一张图就 getComputedStyle 两次 + 新建一个 matchMedia
    （一次筛选变化会建 40+ 张图）。首次用到时算好缓存起来。 */
@@ -579,6 +985,7 @@ function chartMotion() {
 }
 function chartDefaults(tc) {
   const mo = chartMotion();
+  const tick = tickFontSize();   // 刻度 / 图例字号，见 tickFontSize()
   return {
     responsive: true, maintainAspectRatio: false,
     /* 悬停 v2（2026-10-12 用户两次反馈灵敏度差，重写）：
@@ -599,13 +1006,13 @@ function chartDefaults(tc) {
     transitions: { active: { animation: { duration: mo.fast } } },
     layout: { padding: { top: 6, right: 4, bottom: 0, left: 0 } },
     plugins: {
-      legend: { position:'bottom', labels: { padding:10, usePointStyle:true, pointStyle:'circle', font:{size:10}, boxWidth:6, boxHeight:6, color:tc['ink-2'] } },
+      legend: { position:'bottom', labels: { padding:10, usePointStyle:true, pointStyle:'circle', font:{size:tick}, boxWidth:6, boxHeight:6, color:tc['ink-2'] } },
       tooltip: { backgroundColor: tc.surface, titleColor: tc.ink, bodyColor: tc['ink-2'],
         borderColor: tc.gridline, borderWidth: 1, padding: 10, cornerRadius: 8, boxPadding: 4, usePointStyle: true, titleFont: { weight: '600' } },
     },
     scales: {
-      x: { grid: { display:false }, ticks: { font:{size:10}, padding:4, color:tc['ink-3'] }, border: { display:false } },
-      y: { beginAtZero: true, grid: { lineWidth:1, color:tc.gridline }, ticks: { font:{size:10}, padding:4, color:tc['ink-3'] }, border: { display:false } },
+      x: { grid: { display:false }, ticks: { font:{size:tick}, padding:4, color:tc['ink-3'] }, border: { display:false } },
+      y: { beginAtZero: true, grid: { lineWidth:1, color:tc.gridline }, ticks: { font:{size:tick}, padding:4, color:tc['ink-3'] }, border: { display:false } },
     },
   };
 }
@@ -662,14 +1069,36 @@ function makeChart(id, type, labels, datasets, opts) {
   if (!(opts && opts.interaction) && datasets.length > 1) {
     options.interaction = { mode:'index', intersect:false };
     options.hover = { mode:'index', intersect:false };
+    /* 上面升级成 index 后有个副作用：点一下拿到的元素是**该列所有系列**，
+       顺序按 datasetIndex —— els[0] 永远是第一条。于是「点第二条线」也返回第一条，
+       调用方按 els[0].datasetIndex 判断就永远判成第一系列：
+       入离职趋势图点「离职」的点，筛出来的是「入职」的人。
+       按「到鼠标落点」的距离重排，els[0] 回到用户真正点中的那一条。
+       排序稳定，距离相同时保持原顺序。 */
+    const userClick = options.onClick;
+    if (typeof userClick === 'function') {
+      options.onClick = (evt, els, chart) => {
+        if (els && els.length > 1) {
+          els = els.slice().sort((a, b) => {
+            const da = (a.element.x - evt.x) ** 2 + (a.element.y - evt.y) ** 2;
+            const db = (b.element.x - evt.x) ** 2 + (b.element.y - evt.y) ** 2;
+            return da - db;
+          });
+        }
+        return userClick(evt, els, chart);
+      };
+    }
   }
+  /* 环形 / 饼图这一类（非直角坐标系）要做的三件事：不带 scales、让出标注宽度、
+     只挂环形标注插件。判据只写一处，别在三个地方各写一遍 type 比较。 */
+  const isRing = type === 'doughnut' || type === 'pie';
   if (type === 'doughnut') {
     options.cutout = '62%';
     /* 环形图弧面之间留白多，chartDefaults 的 nearest + intersect:false 正合适：
        不必压中弧面，靠近即命中 */
     options.plugins.tooltip.callbacks = { label: ctx => {
       const t = ctx.dataset.data.reduce((a,b)=>a+b,0) || 1;
-      return `${ctx.label}: ${ctx.parsed} 人 (${(ctx.parsed/t*100).toFixed(1)}%)`; } };
+      return `${ctx.label}: ${ctx.parsed} 人 (${ringPct(ctx.parsed, t)})`; } };
   } else {
     options.plugins.tooltip.callbacks = options.plugins.tooltip.callbacks || { label: ctx =>
       (ctx.dataset.label ? ctx.dataset.label + ': ' : '') + ctx.parsed.y + ' 人' };
@@ -687,8 +1116,31 @@ function makeChart(id, type, labels, datasets, opts) {
     options.layout.padding.top = Math.max(options.layout.padding.top, 16);
     if (isHoriz) options.layout.padding.right = 30;   // 给条尾外置数值留位
   }
+  /* 环形 / 饼图没有坐标轴，但 chartDefaults 里的 x/y 还挂在 options.scales 上 ——
+     Chart.js 照样会把这两根轴建出来并绘制：y 轴 beginAtZero 又没有数据，
+     只剩 0 这一个刻度，画出来就是横穿环面的一根参考线。非直角坐标系的图型直接不带 scales。 */
+  let pad = 0;   // 环形图左右各让出多少（见 ringLabelPad）；非环形图恒为 0
+  if (isRing) {
+    delete options.scales;
+    /* 外置标注要横向空间：按最长的一条标签把左右让出来（0 = 不画标签，见 ringLabelPad）。 */
+    pad = ringLabelPad(datasets[0].data || [], labels);
+    if (pad) options.layout = { padding: { left: pad, right: pad, top: 6, bottom: 0 } };
+    /* 图例走 Chart.js 默认（只有色块 + 名称），数字归指引线旁的标注（见 ringLabelLines）。
+       ⚠️ 图例**不能折行**：4.4.7 的 legend 布局只按单行量宽高（_fitRows 用一个 itemHeight，
+          不乘 text 数组的行数），给 text 传数组能画出两行却排不下两行，条目会互相重叠
+          —— 2026-10-16 试过，有截图取证，别再走这条路。
+       既然它折不了、又和标注抢同一条横向空间，那就只能二选一：放得下才画，放不下就别画。
+       放不下时图例还得占掉一百多像素高（宽卡片里一条占一行），把环和标注一起挤扁。
+       类别名在引导线上已经写全，图例本来就是冗余的（CLAUDE.md v8.13 ② 记过一笔）。
+       ⚠️ 量容器宽必须用 **parentElement**：建图这一刻 canvas 还没被 Chart.js 铺开，
+          el.clientWidth 读到的是 canvas 的**固有尺寸 300**，比容器真宽 312 少十几像素。 */
+    const availW = (el.parentElement || el).clientWidth;
+    if (pad && availW > 0 && legendNeedW(labels) > availW - 2 * pad) {
+      options.plugins.legend = { ...options.plugins.legend, display: false };
+    }
+  }
   const inst = new Chart(el.getContext('2d'),
-    { type, data: { labels, datasets }, options, plugins: [BAR_VALUE_PLUGIN] });
+    { type, data: { labels, datasets }, options, plugins: isRing ? [BAR_VALUE_PLUGIN, RING_LABEL_PLUGIN] : [BAR_VALUE_PLUGIN] });
   BAR_VALUE_CFG.set(inst.id, bv);
   chartInstances[id] = inst;
 }
@@ -725,20 +1177,16 @@ function hbarChart(id, labels, datasets, opts) {
   makeChart(id, 'bar', labels, datasets, o);
 }
 function lineChart(id, labels, datasets, opts) { makeChart(id, 'line', labels, datasets, opts); }
-function doughnutChart(id, labels, data, colors) {
-  destroyChart(id);
-  const tc = themeColors();
-  const el = document.getElementById(id);
-  if (!el) return;
-  chartInstances[id] = new Chart(el.getContext('2d'), {
-    type: 'doughnut',
-    data: { labels, datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: tc.surface }] },
-    options: chartDefaults(tc),
-  });
-  chartInstances[id].options.plugins.tooltip.callbacks = { label: ctx => {
-    const t = ctx.dataset.data.reduce((a,b)=>a+b,0) || 1;
-    return `${ctx.label}: ${ctx.parsed} 人 (${(ctx.parsed/t*100).toFixed(1)}%)`; } };
-  chartInstances[id].update();
+/* 环形图 = makeChart 的一条分支，不再自己 new Chart（2026-10-15 合并）。
+   原先这里是一条并行路径，两处悄悄分家：① 没有 cutout，Chart.js 默认 50%，
+   比别处（62%）粗一圈；② options 是浅合并，调用方一传 plugins 就把主题化
+   tooltip 整块顶掉（深色模式变白底黑字）。加环图别再另起一条路径。 */
+function doughnutChart(id, labels, data, colors, opts) {
+  /* 弧面描边只要 --surface 一支：这里读 40 个变量拼整个 themeColors() 只为取一个值，
+     而 makeChart 内部已经读过一次整份了 */
+  const surface = getCSS('--surface') || '#fff';
+  makeChart(id, 'doughnut', labels,
+    [{ data, backgroundColor: colors, borderWidth: 2, borderColor: surface }], opts);
 }
 
 /* ── Toast ── */
@@ -798,6 +1246,11 @@ function fpOpenDialog(popup, label) {
 /* 弹窗顶部标题条（两处弹窗外壳共用）。样式全在 style.css 的 .fp-head / .fp-close，这里只出结构。 */
 function fpHeaderHtml(title, closeJs) {
   return `<div class="fp-head"><span>${esc(title)}</span><span class="fp-close" role="button" tabindex="0" aria-label="关闭" onclick="${closeJs}" onkeydown="if(event.key==='Enter'||event.key===' '){${closeJs}}"><span class="mi">close</span></span></div>`;
+}
+/* 弹窗里的两枚排序列（员工明细表与 mini-table 共用）：传进各自的下单函数名即可 */
+function fpSortHtml(ascJs, descJs) {
+  return `<div class="fp-sort"><button class="fp-sort-btn" onclick="${ascJs}"><span class="mi">arrow_upward</span> 升序</button>` +
+    `<button class="fp-sort-btn" onclick="${descJs}"><span class="mi">arrow_downward</span> 降序</button></div>`;
 }
 const FP_DATE_RE = /^\d{4}-\d{1,2}-\d{1,2}$/;
 function fpIsDateCol(entries) { return entries.length > 1 && entries.every(e => FP_DATE_RE.test(e.value)); }
@@ -875,3 +1328,153 @@ function fpSyncNodes() {
     all.indeterminate = on > 0 && on < leaves.length;
   }
 }
+
+/* ═══ 下拉 · 自定义件（2026-10-14 用户拍板：原生 select 弹层太丑）═══
+   原生 <select> 保留作数据源（display:none，value/options/onchange 全部照旧），
+   上面盖一层「触发按钮 + 列表框」。改值仍走 select.value + change 事件，
+   onFilterChange 等既有链路零改动。设计系统：
+   高度 --ctl-h / 圆角 --radius-sm / 浮层 --shadow-float + --z-popup /
+   动效 --dur-base + --ease-out（令牌注释里「下拉」就是这一档）/
+   箭头 expand_more 收进 --space-8 内距，不贴边。
+
+   2026-10-15：从「只接管筛选栏」扩到**全站任意 <select>**（P16：默认接管，
+   留原生才需要写理由）。新增接管的三处：分页条 .pg-select ×2、多选模式条
+   .gb-sel ×2、区间对比 .range-select ×2。
+   （.gb-sel 的两个冻结下拉已于 2026-10-15 随悬浮工具条一并删除，接管逻辑不必跟着改 ——
+     它扫的是全文档的 <select>，没有这号元素自然就跳过了。）
+   三处的共性坑：**它们是 innerHTML 重铺出来的**，重铺后旧按钮连同 select 一起没了 ——
+   所以渲染完必须再调一次 enhanceSelects()（幂等，已接管的靠 sel.__selx 跳过）。 */
+/* 列表框只在**打开时**建：菜单关着看不见，跟着每次筛选变化重建是白做功 */
+function selxBuildMenu(wrap, sel) {
+  wrap.querySelector('.selx-menu').innerHTML =
+    [...sel.options].map(o =>
+      `<div class="selx-opt" role="option" tabindex="-1" data-v="${esc(o.value)}" aria-selected="${o.selected}">${esc(o.textContent.trim())}</div>`).join('');
+}
+/* 只同步按钮文字。选项变了不必重建菜单——下次 selxOpen 会从 sel.options 重新生成 */
+function selxSync(sel) {
+  const wrap = sel.__selx;
+  if (!wrap) return;
+  const cur = sel.options[sel.selectedIndex];
+  wrap.querySelector('.selx-label').textContent = cur ? cur.textContent.trim() : '';
+}
+/* 顶层 function 声明本身就是 window 的属性，不必再赋一次 */
+function selxSyncAll() { document.querySelectorAll('select').forEach(selxSync); }
+let openSelx = null;   // 同一时刻最多开一个，留着它就不必每次点按全文档查一遍
+function selxClose(wrap) {
+  if (!wrap) return;
+  wrap.classList.remove('open');
+  wrap.querySelector('.selx-menu').hidden = true;
+  wrap.querySelector('.selx-btn').setAttribute('aria-expanded', 'false');
+  if (openSelx === wrap) openSelx = null;
+}
+function selxMark(opt) {
+  if (!opt) return;
+  opt.parentElement.querySelectorAll('.selx-opt').forEach(o => o.classList.toggle('active', o === opt));
+}
+function selxOpen(sel, wrap) {
+  if (openSelx) selxClose(openSelx);
+  selxBuildMenu(wrap, sel);
+  wrap.classList.add('open');
+  const menu = wrap.querySelector('.selx-menu');
+  menu.hidden = false;
+  wrap.querySelector('.selx-btn').setAttribute('aria-expanded', 'true');
+  openSelx = wrap;
+  /* 朝哪边开：菜单此刻已经可见，量一次就有数。触发器贴着视口底部时（分页条在页面最下沿）
+     默认的向下开会把菜单开到屏幕外面，往上翻 —— 上面得真放得下才翻，否则宁可就地滚。 */
+  const mr = menu.getBoundingClientRect();
+  const br = wrap.getBoundingClientRect();
+  wrap.classList.toggle('flip',
+    mr.bottom > window.innerHeight - 8 && br.top - mr.height - 8 > 0);
+  const cur = menu.querySelector('[aria-selected="true"]') || menu.querySelector('.selx-opt');
+  selxMark(cur);
+  fpFocus(cur);
+}
+function selxPick(sel, wrap, opt) {
+  /* 同值重选什么都不用做：值没变、按钮文字没变，菜单下次打开会重建 */
+  if (sel.value !== opt.dataset.v) {
+    sel.value = opt.dataset.v;
+    /* 按钮文字立刻跟上。**不能指望调用方回头同步**：筛选栏那条链路会经由
+       onFilterChange → refreshFilterOptions → selxSyncAll 兜一圈，而分页条 /
+       区间选择器根本不走那条路，文字会停在旧值上。 */
+    selxSync(sel);
+    /* 有的下拉一改值就整块重铺（分页条走 renderEmployeeTable），wrap 和 select 一起被换掉。
+       先记下找回同一件的钥匙（下一行），change 回来再决定焦点交给谁。
+       **selxClose 必须无条件调用**：游离节点也关得掉，但 openSelx 不归零的话，
+       下一枚下拉就永远算作「有菜单开着」，后续点按全被当成点在菜单外。 */
+    const key = sel.getAttribute('aria-label') || sel.id;
+    sel.dispatchEvent(new Event('change'));   // 走既有 onchange → onFilterChange / empGoToPage
+    selxClose(wrap);
+    if (!wrap.isConnected) {
+      /* 别对游离节点调 focus()，那等于把焦点丢给 body（P12）——去找重建后的那一件 */
+      const nb = key && document.querySelector(
+        'select[aria-label="' + CSS.escape(key) + '"], select[id="' + CSS.escape(key) + '"]');
+      if (nb && nb.__selx) fpFocus(nb.__selx.querySelector('.selx-btn'));
+      return;
+    }
+  } else {
+    selxClose(wrap);
+  }
+  fpFocus(wrap.querySelector('.selx-btn'));
+}
+/* root 可传某个子容器：表格重铺后只需接管自己那条分页栏，不必每次扫全文档 */
+function enhanceSelects(root) {
+  (root || document).querySelectorAll('select:not(.selx-native)').forEach(sel => {
+    if (sel.__selx) return;
+    /* 名字：优先 select 自带的 aria-label（分页条 / 工具条 / 区间选择器都是这么标的），
+       其次找紧邻的 <label>（筛选栏那一排）。**不能只认 previousElementSibling**——
+       分页条的邻居是个只装图标的 <button>，读出来会是连字名「first_page」。 */
+    const lab = sel.previousElementSibling;
+    const name = sel.getAttribute('aria-label')
+      || (lab && lab.tagName === 'LABEL' ? lab.textContent.trim() : '')
+      || sel.id || '下拉选项';
+    const wrap = document.createElement('div');
+    wrap.className = 'selx' + (sel.classList.contains('group-select') ? ' is-group' : '');
+    wrap.innerHTML =
+      '<button type="button" class="selx-btn" aria-haspopup="listbox" aria-expanded="false"' +
+      ' aria-label="' + esc(name) + '">' +
+      '<span class="selx-label"></span><span class="mi selx-arrow" aria-hidden="true">expand_more</span></button>' +
+      '<div class="selx-menu" role="listbox" tabindex="-1" hidden></div>';
+    sel.insertAdjacentElement('afterend', wrap);
+    /* 按钮继承原生件自己的类名（.pg-select / .range-select 等），
+       它原有的外形规则原样生效 —— 外形只在各组件那一处定义，不在这儿抄第二遍。 */
+    const btn = wrap.querySelector('.selx-btn');
+    sel.classList.forEach(c => { if (c !== 'group-select') btn.classList.add(c); });
+    sel.classList.add('selx-native');
+    sel.__selx = wrap;
+
+    wrap.querySelector('.selx-btn').addEventListener('click', () =>
+      wrap.classList.contains('open') ? selxClose(wrap) : selxOpen(sel, wrap));
+    wrap.querySelector('.selx-menu').addEventListener('click', ev => {
+      const opt = ev.target.closest('.selx-opt');
+      if (opt) selxPick(sel, wrap, opt);
+    });
+    wrap.querySelector('.selx-menu').addEventListener('keydown', ev => {
+      const opts = [...wrap.querySelectorAll('.selx-opt')];
+      const i = opts.findIndex(o => o.classList.contains('active'));
+      if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+        ev.preventDefault();
+        const n = opts[(i + (ev.key === 'ArrowDown' ? 1 : -1) + opts.length) % opts.length];
+        selxMark(n); fpFocus(n);
+      } else if (ev.key === 'Home' || ev.key === 'End') {
+        ev.preventDefault();
+        const n = opts[ev.key === 'Home' ? 0 : opts.length - 1];
+        selxMark(n); fpFocus(n);
+      } else if (ev.key === 'Enter' || ev.key === ' ') {
+        ev.preventDefault();
+        if (opts[i]) selxPick(sel, wrap, opts[i]);
+      } else if (ev.key === 'Escape' || ev.key === 'Tab') {
+        selxClose(wrap);
+        if (ev.key === 'Escape') fpFocus(wrap.querySelector('.selx-btn'));
+      }
+    });
+    wrap.querySelector('.selx-btn').addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && wrap.classList.contains('open')) { selxClose(wrap); }
+    });
+    selxSync(sel);
+  });
+}
+/* 点外面关（mousedown 即关，与 grid 右键菜单同款口径） */
+document.addEventListener('mousedown', ev => {
+  if (openSelx && !openSelx.contains(ev.target)) selxClose(openSelx);
+});
+enhanceSelects();

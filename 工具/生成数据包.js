@@ -90,12 +90,18 @@ say('【完整版数据包 · 全量】');
      本年度入职名单 / 高潜名单 / C型干部名单 都含「名单」，
      宽松匹配会把它们误当花名册。
    ⚠ ledger 谓词要排除 绩效考评明细（那两张是绩效表），但要放行 绩效B-C人员情况（台账）。 */
+/* 绩效 sheet 的两种命名（2026-10-21 表格改版）：
+     旧：干部梯队26H1绩效考评明细 / 人才梯队26H1绩效考评明细
+     新：干部梯队26H1绩效 · 人才梯队26H1绩效 · 25H2绩效 · 干部梯队25H1绩效 · 人才梯队25H1绩效
+   新表按「梯队 + 期间」拆开，所以既认「绩效考评明细」也认「…梯队…绩效」与「25H2绩效」。
+   ⚠ 谓词必须排除「绩效B-C人员」（那是台账），它的名字里也有「绩效」。 */
+const isPerfName = sn => /绩效考评明细|^(干部梯队|人才梯队).*绩效$|^\d{2}H\d绩效$/.test(sn);
 const SHEET = {
   emp:    sn => /^人员数据/.test(sn),
-  perf:   sn => /绩效考评明细/.test(sn),
+  perf:   isPerfName,
   roster: sn => BU.rosterSheet.test(sn) || /花名册/.test(sn),
   manual: sn => /^(部门编制|指标目标|月度快照|招聘计划|工作分工)$/.test(sn),
-  ledger: sn => !/绩效考评明细/.test(sn) && /组织架构|人员情况|校招需求|外包名单|外包评价|入职名单|招聘未达成|储备干部|高潜|部门梯队|C型干部|校招名单|OD名单/.test(sn),
+  ledger: sn => !isPerfName(sn) && /组织架构|人员情况|校招需求|外包名单|外包评价|入职名单|招聘未达成|储备干部|高潜|部门梯队|C型干部|校招名单|OD名单|B-C|职等晋升/.test(sn),
 };
 function splitOf(wb, pred) {
   const names = wb.SheetNames.filter(pred);
@@ -143,7 +149,7 @@ if (fs.existsSync(CONS)) {
       say('     看板会以 KPA 原文件为准；要让 Excel 版看板也对上，请把新导出的 KPA 重新粘进汇总表。');
     }
   } else if (empFromCons) {
-    files.emp = '<文件名已脱敏>.xlsx · 人员数据';
+    files.emp = path.basename(BU.book) + ' · 人员数据';
     books.emp = empFromCons;
     say('② 人员：汇总表里的「人员数据」sheet（没找到 data/KPA*.xls）');
   } else say('② 人员：✗ 没有可用的人员数据');

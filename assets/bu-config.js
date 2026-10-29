@@ -33,7 +33,7 @@ window.BU = {
 
   /* ── data/ 下的兜底文件名（file:// 双击打开时走数据包，通常用不到） ──── */
   files: {
-    cons:   'data/<文件名已脱敏>.xlsx',
+    cons:   'data/人力看板.xlsx',
     emp:    'data/KPA.xls',
     perf:   'data/绩效考评结果汇总.xlsx',
     ledger: 'data/人才现状.xlsx',

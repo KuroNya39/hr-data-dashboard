@@ -13,9 +13,11 @@
       grid.js / table.js / pages.js / core.js 的内联样式直接写 var(--x)。
       改名或删除前必须 grep 全部 assets/js。
 
-   ⚠️ 旧值 → 新值（2026-10-13 设计系统落地）：
-      圆角 6/7/10 → 4/8/12；字号去掉 10.5 / 12.5 / 13.5 三个半像素档；
-      间距归一到 8 网格（4 为半拍）；动效时长从散值收进 120/180/260 三档。
+   ⚠️ 旧值 → 新值：
+      · 2026-10-13 设计系统落地：圆角 6/7/10 → 4/8/12；字号去掉 10.5 / 12.5 / 13.5
+        三个半像素档；间距归一到 8 网格（4 为半拍）；动效时长从散值收进 150/220/300 三档。
+      · 2026-10-14：正文行高 1.55 → 1.5（对齐行业默认）；浮层层级档间拉开大间隔
+        （相对顺序与渲染结果不变，只是留出插层的余地）。
    ═══════════════════════════════════════════════════════════════════════════ */
 :root {
   color-scheme: light;
@@ -24,8 +26,8 @@
   --font:"Noto Sans SC", sans-serif;
   /* 字号刻度：4 的倍数，无合适档取 2 的倍数；正文底线 12px。
      半像素档（10.5/12.5/13.5）无法复现，已按本表归一。 */
-  --fs-10:10px;   /* 微型标记：tag、scope-tag、nav-badge */
-  --fs-12:12px;   /* 小号：表头、注释、侧栏导航、次要标签（用得最多的一档） */
+  --fs-12:12px;   /* 小号，也是全站最小档：表头、注释、侧栏导航、次要标签、微型标记（tag / scope-tag）。
+                     2026-10-14 撤掉 10px 档——低于 12px 在 Windows 上渲染发虚，行业通用下限就是 12px。 */
   --fs-14:14px;   /* 正文基准（body） */
   --fs-16:16px;   /* 卡片标题、按钮、页面标题 */
   --fs-18:18px;   /* 模块标题、行内图标 */
@@ -42,7 +44,7 @@
   /* 行高：倍数随字号反着走。单行控件不查字号表，走 --lh-ui */
   --lh-tight:1.2;  /* 大标题 */
   --lh-ui:1.4;     /* 单行控件：按钮、输入框、下拉项、徽标 */
-  --lh-body:1.55;  /* 正文（body 基准） */
+  --lh-body:1.5;   /* 正文（body 基准）。2026-10-14 从 1.55 收到 1.5，对齐行业默认 */
   --lh-loose:1.75; /* 多行说明、空态 */
   /* 字重：Noto Sans SC 是可变字重（100–900），三档都能渲染出差异。
      不设 400 档：body 不写 font-weight 就是 400，没有一处需要显式「重置回常规」。 */
@@ -52,9 +54,13 @@
      由几何反推的例外写在用到的地方，不在这里补档位。 */
   --space-4:4px; --space-8:8px; --space-16:16px; --space-24:24px;
   --space-32:32px; --space-48:48px;
-  /* 行内微型标记（tag / pill / 徽标）的内距：**有意不进 8 网格**。
-     它们的高度必须 ≤ 所在行文字的高度，撑到 4px 会把 KPI 标签行与表头整体撑高。
-     这是 G6「内距只取档位」的例外，改这里要连带看 .kpi-label / .mini-table th 的高度。 */
+  /* 行内微型标记（tag / pill / 徽标）的内距：**有意不进 8 网格**（G6「内距只取档位」的例外）。
+     2026-10-14 撤掉 10px 字号档后，这条的前提变了：字号 12px × --lh-ui 1.4 + 上下各 2px = **20.8px**，
+     而它所在行的文字行高是 12px × --lh-body 1.5 = **18px**——徽标现在比文字行高 2.8px，
+     是 KPI 标签行 / 表头行里最高的元素（原 10px 档下两者恰好都是 18px）。
+     **这是接受的**：抬到 12px 是用户拍的板（可读性优先），代价就是标签行高 18 → 20.8px，
+     实测无折行、无横向溢出（`.workbuddy/.../probe-fs12.js`）。
+     撑到 4px 会再多 4px，仍不建议。改这里要连带看 .kpi-label / .mini-table th 的行高。 */
   --chip-y:2px; --chip-x:8px;
 
   /* 侧栏宽度：.sidebar 的 width 与 .main 的 margin-left 必须同源，改一处即可 */
@@ -99,16 +105,34 @@
        旧的 #5f7288 在白底 4.94 达标、在 --surface-2 上只有 4.43 —— 差一点点，但是不达标。
         底色: --surface 5.56 / --surface-2 4.98 / --page 5.17（深色模式 5.51 / 5.03 / 5.93）*/
   --ink:#0d1b2a; --ink-2:#4a5b70; --ink-3:#586a7e;
+  /* 环形图引导线专用灰（core.js 的外置标注插件取用）。
+     不直接借 --ink-3：那是「注释级文字」的灰，画成线太抢环面（用户反馈「指引线颜色太深了，浅一点」）；
+     也不借 --gridline：那是网格线，1px 画出来几乎看不见（更早一轮的反馈）。
+     取两者之间 —— 白卡 2.2:1、深卡 2.3:1，只做「把文字牵到弧面」的视觉连线，不承载信息本身。 */
+  --ring-leader:#9db0c6;
 
-  /* ── 强调色（蓝）────────────────────────────────────────────────────
-     --accent       文字 / 描边 / 图标：按「坐在页面底上」校准
-     --accent-fill  实心按钮底：与 --on-accent 配对，**必须单独校验对比度**
-                    （深色模式下 accent 提亮到 #3b82f6，白字只有 3.76:1 不达标，
-                      所以实心底另给一档，见《设计系统.md》§3.4） */
-  --accent:#2563eb; --accent-strong:#1d4ed8; --accent-soft:rgba(37,99,235,.08);
-  --accent-fill:#2563eb; --on-accent:#ffffff;
+  /* ── 强调色（蓝）· 2026-10-15 换代 #2563eb → #3186ff 系 ───────────────
+     用户选定的新品牌色 #3186ff 更亮，但**白底只有 3.51:1**：既不能当白底上的文字（需 4.5:1），
+     也不能当实心按钮底配白字。所以按同色相分三档，本色只负责**不承载文字的填充**。
+     --accent              文字 / 描边 / 图标：按「坐在页面底上」校准
+     --accent-fill         实心按钮底：与 --on-accent 配对，**必须单独校验对比度**
+     --accent-fill-hover   实心按钮悬停底：**必须与 --accent-strong 分开**——
+                           前者要「深色下更亮」（它是浅底上的字），后者要「始终与白字配对达标」，
+                           合成一个必然顾此失彼。旧版合在一起，深色下白字只有 1.80:1。
+     ⚠️ **刻意不设 --accent-brand**：品牌本色 #3186ff 只该出现在「不承载文字的填充」里，
+     而本产品这类填充只有**图表分类色板第一色** —— 就是下面的 --s1（同值）。
+     `.brand-mark` 上有白色 logo，必须走 --accent-fill（白字 5.02）而不是本色（3.51 不达标）；
+     几条 3px 装饰色条属于「描边」角色，走 --accent。
+     单设一个没人引用的令牌就是悬挂令牌（v8.10 的规矩：逐个有用户）。详见《设计系统.md》§3.4 */
+  --accent:#1a6ae0; --accent-strong:#1259c9; --accent-soft:rgba(49,134,255,.10);
+  --accent-fill:#1a6ae0; --accent-fill-hover:#1259c9; --on-accent:#ffffff;
+  /* 表格行 / 列选中底：**必须不透明**。
+     2026-10-21 修「冻结列后面透着别的列」：原先用 --accent-soft（10% 透明）压在半透明层上，
+     冻结格的不透明底被它盖掉之后，横向滚过去的列就从冻结列里透出来，文字叠字。
+     选中的视觉强度靠这个实色值本身，别再退回 rgba。 */
+  --sel-bg:#e2edfd;
   /* 描边档：控件**选中 / 聚焦**态的轮廓（不是提示条描边——提示条只有浅底 + 深字） */
-  --accent-border:rgba(37,99,235,.35);
+  --accent-border:rgba(49,134,255,.40);
 
   /* ── 侧栏（深底，自成一套）── */
   --sidebar:#0e1c30; --sidebar-hover:#16273f; --sidebar-active:#1e3557;
@@ -121,58 +145,91 @@
 
   /* ── ★ 语义三族：每族「浅底 soft / 本体 base / 深字 strong」成套 ──────
      缺一档就会出问题：浅底上的文字若退回 base（按白底校准），垫一层洗涤后
-     就跌到达标线下。族内命名一眼可辨方向，不必回文档。 */
-  --pos:#dc2626;  --pos-soft:rgba(220,38,38,.10);  --pos-strong:#b91c1c;  /* 好 / 达标 / 净增 */
-  --neg:#16a34a;  --neg-soft:rgba(22,163,74,.12);  --neg-strong:#15803d;  /* 不好 / 流失 / 逾期 */
-  --warn:#d97706; --warn-soft:rgba(217,119,6,.12); --warn-strong:#92400e; /* 警告 / 临期 / 需关注 */
-  /* 坐在**实心**警告底上的字（toast.error / nav-badge）。
-     深棕而非白：白字落在 --warn 上只有 3.0:1，不达标。 */
-  --on-warn:#2b1a00;
+     就跌到达标线下。族内命名一眼可辨方向，不必回文档。
+
+     2026-10-15 二代：锚定用户选定的 4 个标准色 —— 蓝 #3186ff / 红 #fc413d /
+     黄 #ffbe00 / 绿 #00af57，口径沿用公司口径（红=好 · 绿=不好 · 黄=警告）。
+     ⚠️ 三个 base 都**不能原样当文字色**：#fc413d 白底 3.52、#00af57 白底 2.89、
+     #ffbe00 白底 1.66，全在 4.5 线下。所以每族另配一档同色相的压深值承担文字，
+     base 只负责「不承载文字的填充」（色条、圆点、实心底）。
+     校验脚本：palette-v9.js（WCAG + CIEDE2000），改色必须重跑。 */
+  --pos:#e02b28;  --pos-soft:rgba(252,65,61,.10);  --pos-strong:#b3241f;  /* 好 / 达标 / 净增（白底 4.62） */
+  /* --neg 只作**大字**与填充用：.kpi-value.neg（含复用它的大字场景）都是 --fs-24 起，
+     按大号字门槛（3:1）校准，白底 3.67 / --surface-2 上 3.29 均达标。
+     小字场景一律走 --neg-strong（4.5 线以上）。 */
+  --neg:#009a4d;  --neg-soft:rgba(0,175,87,.12);   --neg-strong:#046c39;  /* 不好 / 流失 / 逾期 */
+  /* --warn 是**实心填充**角色（.mbar.warn 底），用本色最亮；
+     它从不作文字色（grep 过：全站只有 background 与一处 border-color，
+     那处已改走 --warn-strong）。坐在它上面的字必须用 --on-warn（深），
+     白字落在 #ffbe00 上只有 1.66:1 —— 这就是 --on-warn 存在的理由。 */
+  --warn:#ffbe00; --warn-soft:rgba(255,190,0,.16); --warn-strong:#8a5c00; /* 警告 / 临期 / 需关注 */
+  /* 预警严重度三档（alerts.js）：脱离「红=好绿=坏」的指标语义——
+     预警条上「最严重」必须是红，绿条会被读成「没问题」。
+     ⚠️ **值 = 用户给定的三个标准色原值**（2026-10-23 用户：「红黄蓝的颜色和我规定的
+     色值不一样」）。此前为了让 20px 图标在白底上够 3:1，hi/mid/lo 各压深过一档。
+     现在按用户拍板回到原值：红 3.52 / 蓝 3.50 达标；**黄 #ffbe00 白底只有 1.66，
+     用户已知情并选择「宁可淡一点」**——别再为对比度把它调回去，要改先问。 */
+  --alarm-hi:#fc413d; --alarm-mid:#ffbe00; --alarm-lo:#3186ff;
+  /* 预警条上「人数」的文字档（2026-10-23 用户：「提醒项人数的颜色都是蓝色，没有和色条同步」）。
+     上三支是**图形色**（门槛 3:1），人数是 12px **文字**（门槛 4.5:1），原值直接当文字色不够：
+     红 3.52 / 黄 1.66 / 蓝 3.50 全在 4.5 线下。故各配一支同色相的压深档，
+     取的是「能过 4.5 的最浅值」，尽量贴近色条观感。⚠️ 与 --alarm-* 是两个角色，别合并。 */
+  --alarm-hi-fg:#c62a26; --alarm-mid-fg:#9a6b00; --alarm-lo-fg:#1a6ae0;
+  /* 坐在**实心**警告底上的字（toast.error）。
+     深棕而非白：白字落在 --warn 上只有 1.66:1，不达标。 */
+  --on-warn:#3a2600;
 
   /* 禁用态：不用 opacity 表达「淡」，走禁用色档（disabled 控件对比度豁免） */
   --disabled-fg:#a9b7c9; --disabled-border:#e4ebf4;
 
   /* ── 原值层：分类色板（只作分类，不作操作色 / 警示色）─────────────────
-     V9「阳光活力·无紫」（2026-09-12 定稿）：s1–s6 两两 CIEDE2000 min ΔE = 26.0
-     s7/s8 为备用槽（fallback 已收敛到 s1..s6，正常出图用不到）
-     ⚠️ 已用 palette-v84-verify.js 校验，改色必须重跑该脚本 */
-  --s1:#2563eb; --s2:#16a34a; --s3:#f43f5e;
-  --s4:#f97316; --s5:#b8e62e; --s6:#06b6d4;
+     V10（2026-10-15 定稿）：s1–s6 = 用户的 4 个标准色 + 自选 2 支，
+     两两 CIEDE2000 min ΔE = 29.6（旧 V9 是 26.0）。
+     ⚠️ **推翻了 V9 的「无紫」**：要凑够 6 个彼此分得开、又都属于「高饱和中亮」
+     这一族的色相，紫红（ΔE 34.5）是最优解；粉/青一类要么撞红要么撞绿。
+     见《设计系统.md》§3.5 的改版记录。
+     ⚠️ 红（s3）与绿（s2）同时出现在分类板里 —— 这与「红=好 / 绿=不好」的语义
+     确实重叠，是用户明确选择的结果（「以你的 4 色为主」）。图表里的红绿只表示
+     「这是第 3 类 / 第 2 类」，不表示好坏；好坏一律走 pos/neg 的 KPI 与徽标。
+     校验脚本：palette-v9.js，改色必须重跑。 */
+  --s1:#3186ff; --s2:#00af57; --s3:#fc413d;
+  --s4:#ffbe00; --s5:#c026d3; --s6:#00a6b8;
 
   /* 用工类型 6 类（跟随分类色，语义就近） */
   --type-permanent:var(--s1); --type-probation:var(--s4);
   --type-intern-paid:var(--s6); --type-intern-unpaid:var(--s5);
   --type-outsource:var(--s2); --type-labor:var(--s3);
 
-  /* 绩效 7 级有序梯（顶好=红 → 底差=绿，相邻档 ΔE ≥ 18） */
-  --grade-sa:#991b1b; --grade-a:#ef4444; --grade-bp:#f97316;
-  --grade-b:#eab308; --grade-bm:#84cc16; --grade-c:#16a34a; --grade-d:#166534;
+  /* 绩效 7 级有序梯（顶好=红 → 底差=绿，相邻档 ΔE ≥ 18）
+     色相均匀铺过 0°→45°→150°，两端压深以拉开亮度差 */
+  --grade-sa:#6b1410; --grade-a:#d92d28; --grade-bp:#f0702c;
+  --grade-b:#e8ad00; --grade-bm:#9ac22e; --grade-c:#1ba155; --grade-d:#0a6b38;
   /* 绩效等级标签：同一族「淡底 + 同色深字」，只作档位、不作操作 / 警示色。
      与上面 --grade-*（图表热力梯的本体色）分开命名：图表要实心，标签要淡底。 */
-  --gtag-sa-bg:rgba(153,27,27,.12);  --gtag-sa-fg:#991b1b;
-  --gtag-a-bg:rgba(239,68,68,.13);   --gtag-a-fg:#b91c1c;
-  --gtag-bp-bg:rgba(249,115,22,.14); --gtag-bp-fg:#c2410c;
-  --gtag-b-bg:rgba(234,179,8,.20);   --gtag-b-fg:#854d0e;
-  --gtag-bm-bg:rgba(132,204,22,.22); --gtag-bm-fg:#4d7c0f;
-  --gtag-c-bg:rgba(22,163,74,.13);   --gtag-c-fg:#15803d;
-  --gtag-d-bg:rgba(22,101,52,.14);   --gtag-d-fg:#166534;
+  --gtag-sa-bg:rgba(143,26,23,.12);  --gtag-sa-fg:#8f1a17;
+  --gtag-a-bg:rgba(212,43,38,.13);   --gtag-a-fg:#b3241f;
+  --gtag-bp-bg:rgba(240,112,44,.14); --gtag-bp-fg:#9a3d10;
+  --gtag-b-bg:rgba(227,168,0,.20);   --gtag-b-fg:#7a5200;
+  --gtag-bm-bg:rgba(143,187,46,.22); --gtag-bm-fg:#4f6d10;
+  --gtag-c-bg:rgba(27,161,85,.13);   --gtag-c-fg:#0f6b3a;
+  --gtag-d-bg:rgba(10,107,56,.14);   --gtag-d-fg:#0a6b38;
 
-  /* 合同/协议到期强度梯（黄三档） */
-  --expire-30:#92400e; --expire-60:#d97706; --expire-90:#fbbf24;
+  /* 合同/协议到期强度梯（黄三档，浅色下深→浅） */
+  --expire-30:#8a5c00; --expire-60:#c98500; --expire-90:#f0b400;
 
   /* ── 组件别名：语义族 / 原值层的按用途引用 ───────────────────────── */
-  --tag-t1-bg:rgba(146,64,14,.15); --tag-t1-fg:var(--expire-30);   /* 到期：紧急 */
-  --tag-t2-bg:rgba(217,119,6,.15); --tag-t2-fg:#b45309;            /* 到期：关注 */
-  --scope-formal-bg:rgba(59,130,246,.10); --scope-formal-fg:#1d4ed8; /* 口径徽标：正式 */
-  --scope-intern-bg:rgba(202,138,4,.16);  --scope-intern-fg:#854d0e; /* 口径徽标：含实习 */
+  --tag-t1-bg:rgba(138,92,0,.15);  --tag-t1-fg:var(--expire-30);   /* 到期：紧急 */
+  --tag-t2-bg:rgba(201,133,0,.16); --tag-t2-fg:#8a5c00;            /* 到期：关注 */
+  --scope-formal-bg:rgba(49,134,255,.10); --scope-formal-fg:#1259c9; /* 口径徽标：正式（2026-10-15 随主色换代） */
+  --scope-intern-bg:rgba(255,190,0,.16);  --scope-intern-fg:#8a5c00; /* 口径徽标：含实习 */
   --scope-all-bg:#eef3f9; --scope-all-fg:#4a5b70;                    /* 口径徽标：全员 */
   /* 用工类型标签（浅底 + 深字） */
-  --tag-perm-bg:rgba(59,130,246,.12);  --tag-perm-fg:#1d4ed8;
-  --tag-prob-bg:rgba(194,65,12,.13);   --tag-prob-fg:#c2410c;
-  --tag-ip-bg:rgba(101,163,13,.16);    --tag-ip-fg:#4d7c0f;
-  --tag-iu-bg:rgba(202,138,4,.16);     --tag-iu-fg:#854d0e;
-  --tag-os-bg:rgba(22,163,74,.13);     --tag-os-fg:#15803d;
-  --tag-lb-bg:rgba(190,24,93,.12);     --tag-lb-fg:#be185d;
+  --tag-perm-bg:rgba(49,134,255,.12);  --tag-perm-fg:#1259c9;
+  --tag-prob-bg:rgba(240,112,44,.13);  --tag-prob-fg:#9a3d10;
+  --tag-ip-bg:rgba(143,187,46,.16);    --tag-ip-fg:#4f6d10;
+  --tag-iu-bg:rgba(255,190,0,.16);     --tag-iu-fg:#8a5c00;
+  --tag-os-bg:rgba(0,175,87,.13);      --tag-os-fg:#0f6b3a;
+  --tag-lb-bg:rgba(192,38,211,.12);    --tag-lb-fg:#8f1a9e;
   /* 在职 / 离职标签：直接引用语义族（在职=好=红，离职=不好=绿），
      深色模式不必再各自覆盖一遍 —— 跟着 pos/neg 走 */
   --tag-on-bg:var(--pos-soft);  --tag-on-fg:var(--pos-strong);
@@ -183,9 +240,13 @@
   --shadow-pop:0 4px 14px rgba(13,27,42,.10);   /* 贴触发器的小面板：筛选弹窗、悬浮工具条 */
   --shadow-float:0 6px 24px rgba(13,27,42,.14); /* 浮起层：右键菜单、抽屉 */
 
-  /* ── 浮层层级 ── */
-  --z-topbar:40; --z-mobile:45; --z-sidebar:50; --z-bar:96; --z-menu:97;
-  --z-popup:100; --z-toast:200;
+  /* ── 浮层层级：档间留大间隔（10 / 100 / 1000），方便以后插层 ──────────
+     同一带内细分用小步长（如 100 / 110 / 120），不跨带。
+     本项目用不到「遮罩 / 模态」两个锚点：移动端遮罩只需盖住内容、露出侧栏，
+     归在粘性带内。2026-10-14 从 40/45/50/96/97/100/200 重排（顺序未变）。 */
+  --z-topbar:10; --z-mobile:20; --z-sidebar:30;      /* 粘性带 */
+  --z-bar:100; --z-menu:110; --z-popup:120;          /* 浮层带 */
+  --z-toast:1100;                                    /* 提示带（永远最上）。2026-10-14 从 1000 对齐行业默认阶梯 */
 }
 /* 深色模式：只覆盖「随底色变」的值。间距 / 字号 / 圆角 / 动效 / 层级与浅色共用一套，
    改一次两边都生效 —— 别在这里重复定义。 */
@@ -194,48 +255,67 @@
   --page:#0a1424; --surface:#0f1c2e; --surface-2:#152438;
   --border:#20334d; --border-strong:#2c4463; --gridline:#182a42; --baseline:#2c4463;
   --ink:#e6eefb; --ink-2:#a3b6d0; --ink-3:#7e94b0;
-  /* accent 提亮给「深底上的文字/图标」；实心按钮底另用 --accent-fill，
-     否则 #3b82f6 上的白字只有 3.76:1（见《设计系统.md》§3.4） */
-  --accent:#3b82f6; --accent-strong:#93c5fd; --accent-soft:rgba(59,130,246,.14);
-  --accent-fill:#2563eb; --on-accent:#ffffff;
-  --accent-border:rgba(96,165,250,.4);
+  /* 深色下「浅一点」= 更暗（离底色更近）：#3f5674 与浅色档视觉重量相当（约 2.3:1） */
+  --ring-leader:#3f5674;
+  /* 深色下 --accent 提亮到品牌本色 #3186ff（深底 4.88:1，可承载文字）；
+     实心按钮底**不能跟着提亮**，仍走 #1a6ae0（白字 5.02:1）——两者不共用一个令牌。
+     --accent-strong 与 --accent-fill-hover 在这里**必然分道**：前者要更亮，后者要与白字配对。
+     见《设计系统.md》§3.4。 */
+  /* 深色下 --accent 就是品牌本色 #3186ff（深底 4.88:1，可承载文字），不需要另设 --accent-brand */
+  --accent:#3186ff; --accent-strong:#7db4ff; --accent-soft:rgba(49,134,255,.16);
+  --accent-fill:#1a6ae0; --accent-fill-hover:#1259c9; --on-accent:#ffffff;
+  /* 选中底必须不透明（理由见 :root 同名令牌）；深色下按 --surface #0f1c2e 提亮一档 */
+  --sel-bg:#1b3352;
+  --accent-border:rgba(49,134,255,.45);
   --overlay:rgba(0,0,0,.55);
   /* --sidebar-line 不覆盖：深色侧栏与浅色一样是深底，白线照用 */
   --sidebar:#081222; --sidebar-hover:#0f1c2e; --sidebar-active:#16273f;
   --sidebar-text:#7f96b5; --sidebar-text-active:#eef4fd;
   --sidebar-icon:#5d7291;
-  /* 语义三族：提亮一档，soft/strong 与 base 同色相骨架 */
-  --pos:#f87171;  --pos-soft:rgba(248,113,113,.18); --pos-strong:#fca5a5;
-  --neg:#4ade80;  --neg-soft:rgba(74,222,128,.18);  --neg-strong:#86efac;
-  --warn:#fbbf24; --warn-soft:rgba(251,191,36,.18); --warn-strong:#fde047;
-  /* 分类色板 V9 暗色版（提亮一档，与浅色同色相骨架；min ΔE=24.1） */
-  --s1:#60a5fa; --s2:#2f9e44; --s3:#fb7185;
-  --s4:#fdba74; --s5:#e3ed51; --s6:#2dd4bf;
+  /* 语义三族：提亮一档，soft/strong 与 base 同色相骨架（2026-10-15 二代锚定 4 标准色）
+     ⚠️ 深色下**不能沿用浅色的值**：#e02b28 落在 #0f1c2e 上只有 2.7:1，看着像块黑斑。
+     提亮到同色相的浅档，深底上才有辨识度。 */
+  --pos:#ff6b66;  --pos-soft:rgba(252,65,61,.20);  --pos-strong:#ffb3b0;
+  --neg:#3fd07f;  --neg-soft:rgba(0,175,87,.20);   --neg-strong:#9fe8bf;
+  /* --warn 与浅色同值：它是**实心填充**，深色下反而要够亮才跳得出来；
+     坐在它上面的字走 --on-warn（继承浅色的深棕，深色模式不覆盖） */
+  --warn:#ffbe00; --warn-soft:rgba(255,190,0,.20); --warn-strong:#ffd75c;
+  /* 告警三档**故意不在深色覆盖**（2026-10-23 用户要求 = 他给的三个标准色原值）：
+     它们是图形色，三支在 #0f1c2e 上分别 4.74 / 9.74 / 4.77，本来就达标，
+     继承 :root 即可；写一遍同值只会让人以为这里另有深色版、下次只改一边。 */
+  /* 人数文字档：深色下**三支原值本来就 ≥4.5**（4.86 / 10.29 / 4.88），
+     不需要像浅色那样压深——深底上的文字本来就得提亮，压深反而糊成一片。 */
+  --alarm-hi-fg:#fc413d; --alarm-mid-fg:#ffbe00; --alarm-lo-fg:#3186ff;
+  /* 分类色板 V10 暗色版（提亮一档，与浅色同色相骨架；min ΔE 见 palette-v9.js） */
+  /* s1 与浅色同值（2026-10-15 换代）：深底上 4.88:1，作填充够用 */
+  --s1:#4d94ff; --s2:#2fbf72; --s3:#ff6259;
+  --s4:#ffc93d; --s5:#e05fe8; --s6:#2ed0dc;
   --type-permanent:var(--s1); --type-probation:var(--s4);
   --type-intern-paid:var(--s6); --type-intern-unpaid:var(--s5);
   --type-outsource:var(--s2); --type-labor:var(--s3);
-  --grade-sa:#fca5a5; --grade-a:#ef4444; --grade-bp:#fb923c;
-  --grade-b:#fcd34d; --grade-bm:#a3e635; --grade-c:#6ee7b7; --grade-d:#16a34a;
-  --gtag-sa-bg:rgba(252,165,165,.18); --gtag-sa-fg:#fecaca;
-  --gtag-a-bg:rgba(239,68,68,.20);    --gtag-a-fg:#fca5a5;
-  --gtag-bp-bg:rgba(251,146,60,.20);  --gtag-bp-fg:#fdba74;
-  --gtag-b-bg:rgba(252,211,77,.20);   --gtag-b-fg:#fde047;
-  --gtag-bm-bg:rgba(163,230,53,.20);  --gtag-bm-fg:#bef264;
-  --gtag-c-bg:rgba(110,231,183,.20);  --gtag-c-fg:#6ee7b7;
-  --gtag-d-bg:rgba(74,222,128,.20);   --gtag-d-fg:#86efac;
+  /* 绩效 7 级梯在深色下方向不变（好=红 → 差=绿），但整体提亮一档 */
+  --grade-sa:#ffb3b0; --grade-a:#ff5a51; --grade-bp:#ff9a5c;
+  --grade-b:#ffc93d; --grade-bm:#b6d94a; --grade-c:#5fd9a0; --grade-d:#12854a;
+  --gtag-sa-bg:rgba(255,179,176,.18); --gtag-sa-fg:#ffd0ce;
+  --gtag-a-bg:rgba(255,98,89,.20);    --gtag-a-fg:#ffb3b0;
+  --gtag-bp-bg:rgba(255,154,92,.20);  --gtag-bp-fg:#ffc4a6;
+  --gtag-b-bg:rgba(255,201,61,.20);   --gtag-b-fg:#ffdf8a;
+  --gtag-bm-bg:rgba(182,217,74,.20);  --gtag-bm-fg:#d3ea96;
+  --gtag-c-bg:rgba(79,201,138,.20);   --gtag-c-fg:#a5e6c4;
+  --gtag-d-bg:rgba(31,158,82,.20);    --gtag-d-fg:#6fd6a2;
   /* 到期强度梯在深色下方向翻转：深→浅（浅色是浅→深） */
-  --expire-30:#fde047; --expire-60:#f59e0b; --expire-90:#b45309;
-  --tag-t1-bg:rgba(253,224,71,.18); --tag-t1-fg:#fde047;
-  --tag-t2-bg:rgba(245,158,11,.18); --tag-t2-fg:#fbbf24;
-  --scope-formal-bg:rgba(96,165,250,.16); --scope-formal-fg:#93c5fd;
-  --scope-intern-bg:rgba(250,204,21,.18); --scope-intern-fg:#fde047;
+  --expire-30:#ffd75c; --expire-60:#e8a800; --expire-90:#a06a00;
+  --tag-t1-bg:rgba(255,215,92,.18); --tag-t1-fg:#ffd75c;
+  --tag-t2-bg:rgba(232,168,0,.20);  --tag-t2-fg:#f0b400;
+  --scope-formal-bg:rgba(49,134,255,.16); --scope-formal-fg:#7db4ff;
+  --scope-intern-bg:rgba(255,190,0,.18);  --scope-intern-fg:#ffd75c;
   --scope-all-bg:#152438; --scope-all-fg:#a3b6d0;
-  --tag-perm-bg:rgba(96,165,250,.18);  --tag-perm-fg:#93c5fd;
-  --tag-prob-bg:rgba(251,146,60,.18);  --tag-prob-fg:#fdba74;
-  --tag-ip-bg:rgba(163,230,53,.18);    --tag-ip-fg:#bef264;
-  --tag-iu-bg:rgba(250,204,21,.18);    --tag-iu-fg:#fde047;
-  --tag-os-bg:rgba(34,197,94,.16);     --tag-os-fg:#4ade80;
-  --tag-lb-bg:rgba(251,113,133,.18);   --tag-lb-fg:#fda4af;
+  --tag-perm-bg:rgba(49,134,255,.18);  --tag-perm-fg:#7db4ff;
+  --tag-prob-bg:rgba(255,154,92,.18);  --tag-prob-fg:#ffc4a6;
+  --tag-ip-bg:rgba(182,217,74,.18);    --tag-ip-fg:#d3ea96;
+  --tag-iu-bg:rgba(255,190,0,.18);     --tag-iu-fg:#ffd75c;
+  --tag-os-bg:rgba(0,175,87,.20);      --tag-os-fg:#4fd18a;
+  --tag-lb-bg:rgba(224,95,232,.18);    --tag-lb-fg:#f0a6f5;
   /* --tag-on/off-* 不在这里覆盖：它们引用 --pos/--neg 的族，跟着上面走 */
   --shadow:none; --disabled-fg:#40587c; --disabled-border:#1a2b44;
 }
@@ -270,7 +350,7 @@ button { cursor:pointer; }
   display:flex; align-items:center; justify-content:center; font-weight:var(--fw-bold); font-size:var(--fs-12);
   color:var(--on-accent); }
 .brand-name { font-weight:var(--fw-semi); font-size:var(--fs-14); letter-spacing:.5px; }
-.brand-sub { font-size:var(--fs-10); color:var(--sidebar-text); }
+.brand-sub { font-size:var(--fs-12); color:var(--sidebar-text); }
 .nav { flex:1; display:flex; flex-direction:column; gap:var(--space-4); overflow-y:auto;
   scrollbar-width:none; -ms-overflow-style:none; }
 .nav::-webkit-scrollbar { display:none; }
@@ -280,11 +360,11 @@ button { cursor:pointer; }
 .nav-item:hover { background:var(--sidebar-hover); color:var(--sidebar-text-active); }
 .nav-item.active { background:var(--sidebar-active); color:var(--sidebar-text-active); font-weight:var(--fw-semi); }
 .nav-item .ico { width:var(--icon-md); text-align:center; color:var(--sidebar-icon); flex-shrink:0; }
-.nav-divider { margin:var(--space-8) var(--space-8) var(--space-4); font-size:var(--fs-10); letter-spacing:1px;
+.nav-divider { margin:var(--space-8) var(--space-8) var(--space-4); font-size:var(--fs-12); letter-spacing:1px;
   color:var(--sidebar-icon); border-top:1px solid var(--sidebar-line); padding-top:var(--space-8); }
-.nav-badge { margin-left:auto; background:var(--warn); color:var(--on-accent); font-size:var(--fs-10);
-  min-width:var(--space-16); height:var(--space-16); border-radius:var(--radius-pill); display:none;
-  align-items:center; justify-content:center; padding:0 var(--space-4); }
+/* 侧栏「人员明细」右侧的条数角标已按用户要求删除（2026-10-21）——
+   它数的是预警条数，而预警条只在总览页出现，挂在这里既不对应页面也不可点。
+   .nav-badge 规则与 #navBadge 一起下线，别再按旧版加回来。 */
 /* ── 二级菜单（一级 + 展开/收起） ── */
 .nav-group { display:flex; flex-direction:column; }
 .nav-group-head { display:flex; align-items:center; gap:var(--space-8); padding:var(--space-8);
@@ -332,7 +412,9 @@ button { cursor:pointer; }
   border-radius:var(--radius-sm); font-size:var(--fs-14); gap:var(--space-8); transition:var(--t-color); }
 .tb-btn:hover { border-color:var(--accent); color:var(--accent); }
 .tb-btn.primary { background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent); }
-.tb-btn.primary:hover { background:var(--accent-strong); border-color:var(--accent-strong); color:var(--on-accent); }
+/* 悬停底走 --accent-fill-hover，**不是 --accent-strong**：后者是「浅底上的强调文字」，
+   深色模式下会提亮成 #7db4ff，白字坐上去只剩 1.80:1（旧版就是这么翻车的，见 §3.4） */
+.tb-btn.primary:hover { background:var(--accent-fill-hover); border-color:var(--accent-fill-hover); color:var(--on-accent); }
 .mobile-overlay { display:none; }
 
 /* 内容列宽度上限：只在超宽窗口生效，基准宽度内整列流式铺满 */
@@ -343,17 +425,76 @@ button { cursor:pointer; }
   border:1px solid var(--border); border-radius:var(--radius); padding:var(--space-8); margin-bottom:var(--space-16);
   font-size:var(--fs-12); box-shadow:var(--shadow); }
 .filter-bar label { color:var(--ink-3); }
-/* 原生下拉 / 输入的统一外形：筛选栏与分页条共用（分页下拉是紧凑件，圆角小一档，见 .pg-select） */
-.filter-bar select, .filter-bar input, .pg-select { height:var(--ctl-h); padding:0 var(--space-8); border:1px solid var(--border);
+/* 原生下拉 / 输入 / 自定义下拉按钮的统一外形：筛选栏与分页条共用
+   （分页下拉是紧凑件，圆角小一档，见 .pg-select）。
+   .selx-btn 也在这里取外形——它就是那些下拉的皮肤。
+   **这一条现在同时管原生件与自绘件**：自绘时按钮会继承原生件自己的类名
+   （.pg-select / .range-select，见 core.js enhanceSelects），
+   所以 `.pg-select` 这个选择器命中的已经是**按钮**，原生件被 .selx-native 藏了。
+   外形另写一份的话，改 --ctl-h / 描边令牌时两边会各走各的。 */
+.filter-bar select, .filter-bar input, .filter-bar .selx-btn, .pg-select, .grid-tb .gtb-search {
+  height:var(--ctl-h); padding:0 var(--space-8); border:1px solid var(--border);
   border-radius:var(--radius-sm); background:var(--surface); color:var(--ink); font-size:var(--fs-12); }
 .filter-bar select { max-width:170px; }
 .filter-bar input[type="date"] { width:108px; }
-/* 只把描边点亮当「额外」信号，**不写 outline:none**：
-   这条选择器的权重（0,2,1）压得住下面的全局 :focus-visible（0,1,0），
-   写了就等于把筛选栏这几个控件的焦点环整个删掉——全站唯一没有环的地方。 */
-.filter-bar select:focus, .filter-bar input:focus { border-color:var(--accent); }
-.filter-bar select.group-select { border-color:var(--accent-border); background:var(--accent-soft);
+/* 焦点信号**只有底下那条全局 1px 环**，这里不再点亮描边（2026-10-21 用户「输入框的焦点环
+   是两层很奇怪」）。
+   曾经这里有一条 `.filter-bar select:focus, .filter-bar input:focus { border-color:var(--accent) }`，
+   当时是为了「多一个额外信号」，结果键盘 Tab 到日期框 / 搜索框时是
+   **描边变蓝 + 让出 1px 空隙 + 外面再一圈蓝环**——两个同色圈并排，读数上是「两层」。
+   删掉之后输入框与站内其它控件同款（§5.5「全站一种写法」），少两条例外、不改 outline。
+   ⚠️ 别再把它加回来当「强化」；要更醒目就调 --accent，别叠第二层。
+   筛选栏的原生 select 已由 .selx-native 隐藏，看得见的是 .selx-btn，
+   焦点信号挂在它身上（.selx .selx-btn:focus-visible，用户拍板的描边型例外）。
+   日期框（input[type=date]）是有意保留原生的一处，它走下面那条 :focus-within。
+   人群下拉的强调外形由 `.selx.is-group .selx-btn` 承担，别再给 `.filter-bar select` 加变体。 */
+
+/* ── 自定义下拉件 selx（2026-10-14 用户拍板：原生弹层太丑）──
+   顶栏筛选下拉的皮肤；原生 select 隐藏（.selx-native）只作数据源。
+   复用原生件同款外形令牌：高 --ctl-h / 圆角 --radius-sm / 字号 --fs-12；
+   浮层走 --z-popup + --shadow-float，入场 --dur-base + --ease-out（「下拉」档）。
+   箭头右边留 2px 呼吸位（几何例外：8px 内距 + 2px，不贴边）。 */
+.selx-native { display:none; }
+.selx { position:relative; }
+/* 外形（高 / 内距 / 描边 / 圆角 / 底色 / 字号）来自上面的筛选栏控件统一规则 */
+.selx-btn { display:flex; align-items:center; gap:var(--space-4); min-width:96px;
+  cursor:pointer; transition:var(--t-color); }
+.selx-btn:hover { border-color:var(--border-strong); background:var(--surface-2); }
+.selx.open .selx-btn { border-color:var(--accent); }
+.selx.is-group .selx-btn { border-color:var(--accent-border); background:var(--accent-soft);
   font-weight:var(--fw-semi); color:var(--accent-strong); }
+.selx.is-group.open .selx-btn { border-color:var(--accent); }
+/* 焦点提示只走描边变色（2026-10-14 用户拍板「不要焦点环」）。
+   这是 §13「例外与弯路」记在案的一处**故意例外**：全局 :focus-visible 的
+   outline 环在这里被显式关掉，代之以 border-color 点亮。
+   为什么敢关：.selx-btn 本身就是一块带描边的方块，描边由 --border 跳到
+   --accent 是肉眼可辨的状态跳变，键盘用户不会失明。关环只关这一处，
+   不写任何全局 select / button 规则。
+   必须**写在 `.selx.is-group .selx-btn` 之后**，且多带一个 .selx 祖先（0,3,0）：
+   这样才压得住 is-group 的常驻描边（同为 0,3,0，靠源码顺序取胜），
+   人群那个下拉聚焦时描边才会跳成 --accent —— 实测踩过。
+   只此一条即可：不需要再给 .is-group 补一条 `:focus-visible`（权重打平 + 已在后，重复声明是空转）。 */
+.selx .selx-btn:focus-visible { outline:none; border-color:var(--accent); }
+.selx-label { flex:1 1 auto; min-width:0; text-align:left; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.selx-arrow { flex:0 0 auto; font-size:var(--icon-sm); color:var(--ink-3); margin-right:2px;
+  transition:transform var(--dur-base) var(--ease-inout); }
+.selx.open .selx-arrow { transform:rotate(180deg); }
+.selx-menu { position:absolute; top:calc(100% + 4px); left:0; z-index:var(--z-popup);
+  min-width:100%; width:max-content; max-width:260px; max-height:288px; overflow:auto; padding:var(--space-4);
+  background:var(--surface); border:1px solid var(--border-strong); border-radius:var(--radius-sm);
+  box-shadow:var(--shadow-float); }
+/* 朝上开：默认向下，但触发器贴着视口底部时（分页条就在页面最下沿）菜单会开到屏幕外面。
+   selxOpen 量一次决定，够地方才翻 —— 翻上去的 origin 也跟着翻，
+   否则动画看着像「从下面长出来、却长在上面」。 */
+.selx.flip .selx-menu { top:auto; bottom:calc(100% + 4px); transform-origin:bottom; }
+.selx-opt { padding:var(--space-4) var(--space-8); border-radius:var(--radius-xs);
+  font-size:var(--fs-12); line-height:var(--lh-ui); color:var(--ink-2); cursor:pointer; transition:var(--t-color); }
+/* 下拉项同理：方向键会把焦点移到 .selx-opt 上（键盘模态 → 全局 :focus-visible 命中），
+   环 + 底色高亮两个信号叠在一起反而脏。底色高亮本身就是键盘导航的定位信号，
+   所以这一处也关环——同属上面那条记在案的例外。 */
+.selx-opt:focus-visible { outline:none; }
+.selx-opt:hover, .selx-opt.active { background:var(--surface-2); color:var(--ink); }
+.selx-opt[aria-selected="true"] { color:var(--accent); font-weight:var(--fw-semi); background:var(--accent-soft); }
 .filter-stat { margin-left:auto; color:var(--ink-3); font-size:var(--fs-12); }
 /* 文字链按钮（筛选栏「重置」、明细页预警横幅「清除」）。
    只有一行 12px 文字时盒高 17px，够不着命中区下限，所以撑到 --hit-min。
@@ -364,21 +505,26 @@ button { cursor:pointer; }
 .link-btn { display:inline-flex; align-items:center; min-height:var(--hit-min);
   border:none; background:none; color:var(--accent); font-size:var(--fs-12); transition:var(--t-color); }
 .link-btn:hover { color:var(--accent-strong); }
+/* 图表窗口切换（各部门净变化 近12月/上年末至今）：当前档实底药丸，另一档弱化为墨色文字 */
+.dept-win { color:var(--ink-3); cursor:pointer; padding:0 var(--chip-x); border-radius:var(--radius-pill); }
+.dept-win:hover { color:var(--ink-1); background:none; }
+.dept-win.on { color:var(--accent); font-weight:var(--fw-bold); background:var(--accent-soft); }
+.dept-win.on:hover { color:var(--accent-strong); }
 
 /* ── 口径徽标 ── */
-.scope-tag { display:inline-flex; align-items:center; font-size:var(--fs-10); line-height:var(--lh-ui);
+.scope-tag { display:inline-flex; align-items:center; font-size:var(--fs-12); line-height:var(--lh-ui);
   padding:var(--chip-y) var(--chip-x); border-radius:var(--radius-xs); margin-left:auto;
   font-weight:var(--fw-semi); letter-spacing:.2px; white-space:nowrap; flex-shrink:0; }
 .scope-tag.scope-formal { background:var(--scope-formal-bg); color:var(--scope-formal-fg); }
 .scope-tag.scope-intern { background:var(--scope-intern-bg); color:var(--scope-intern-fg); }
 .scope-tag.scope-all { background:var(--scope-all-bg); color:var(--scope-all-fg); }
-.scope-note { display:inline-flex; align-items:center; font-size:var(--fs-10); line-height:var(--lh-ui);
+.scope-note { display:inline-flex; align-items:center; font-size:var(--fs-12); line-height:var(--lh-ui);
   padding:var(--chip-y) var(--chip-x); border-radius:var(--radius-xs); background:var(--scope-all-bg);
   color:var(--scope-all-fg); margin-left:var(--space-8); font-weight:var(--fw-semi); }
 .scope-note.scope-formal { background:var(--scope-formal-bg); color:var(--scope-formal-fg); }
 .scope-note.scope-intern { background:var(--scope-intern-bg); color:var(--scope-intern-fg); }
 
-/* ── 三块人群概览条 ── */
+/* ── 三块人群概览条（总览页顶部，2026-10-14 恢复保留）── */
 .seg-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:var(--space-8);
   margin-bottom:var(--space-16); }
 .seg-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
@@ -398,18 +544,38 @@ button { cursor:pointer; }
 .alert-bar { display:flex; flex-direction:column; gap:var(--space-8); margin-bottom:var(--space-16); }
 /* 提醒条头：标题 + 一键清空（预警条只在总览显示） */
 .alert-head { display:flex; align-items:center; justify-content:space-between; font-size:var(--fs-12); color:var(--ink-2); }
+/* 折叠：默认只展示前 3 条（alerts.js ALERT_COLLAPSE_N），其余收进「还有 N 条」 */
+.alert-item.alert-extra { display:none; }
+.alert-toggle { display:flex; align-items:center; gap:var(--space-4); margin:0 auto; padding:var(--space-4) var(--space-8);
+  border:none; background:none; color:var(--ink-2); font-size:var(--fs-12); cursor:pointer;
+  border-radius:var(--radius-sm); transition:var(--t-color); }
+.alert-toggle:hover { background:var(--surface-2); color:var(--ink); }
+.alert-toggle .mi { font-size:var(--icon-sm); }
 .alert-head-title { display:inline-flex; align-items:center; gap:var(--space-4); font-weight:var(--fw-semi); }
-.alert-head .alert-head-title .mi { font-size:var(--icon-sm); color:var(--warn); }
+/* 图标色走 --warn-strong：--warn 原值落在 --page 上只有 2.96（图标档需 3）。
+   别换成 --alarm-mid —— 那是「严重度」专用令牌（用户要求用原值 #ffbe00，白底 1.66），
+   只在预警条内部表达严重度，不拿来当界面图标色。 */
+.alert-head .alert-head-title .mi { font-size:var(--icon-sm); color:var(--warn-strong); }
 /* 顶栏：标题之后的上传按钮靠右（flex 里 margin-left:auto 吃掉左侧所有空隙） */
 .topbar .tb-right { margin-left:auto; }
 .alert-item { display:flex; align-items:center; gap:var(--space-8); background:var(--surface);
   border:1px solid var(--border); border-left:var(--stripe) solid var(--accent); border-radius:var(--radius-sm);
   padding:var(--space-8) var(--space-16); box-shadow:var(--shadow); transition:var(--t-slow); }
-.alert-item.alert-warning { border-left-color:var(--warn); }
-.alert-item.alert-critical { border-left-color:var(--neg); }
+.alert-item.alert-warning { border-left-color:var(--alarm-mid); }
+.alert-item.alert-critical { border-left-color:var(--alarm-hi); }
+.alert-item.alert-info { border-left-color:var(--alarm-lo); }
+.alert-item.alert-critical .alert-icon { color:var(--alarm-hi); }
+.alert-item.alert-warning .alert-icon { color:var(--alarm-mid); }
+.alert-item.alert-info .alert-icon { color:var(--alarm-lo); }
 .alert-icon { font-size:var(--icon-lg); }
 .alert-title { font-weight:var(--fw-semi); font-size:var(--fs-12); display:flex; align-items:center; gap:var(--space-4); }
-.alert-count { color:var(--accent); font-size:var(--fs-12); margin-left:var(--space-4); }
+/* 人数跟左边条的严重度走（2026-10-23 用户：「提醒项人数的颜色都是蓝色，没有和色条同步」）。
+   一条提醒不能「红条配蓝数字」两张皮。走的是 --alarm-*-fg 文字档（同色相压深到 4.5:1），
+   不是图形用的 --alarm-* 原值——12px 文字直上原值，黄色等于看不见。 */
+/* 基类即 info 档，红色 / 黄档各覆盖一次；不要给 .alert-info 再补一条同值规则 */
+.alert-count { color:var(--alarm-lo-fg); font-size:var(--fs-12); margin-left:var(--space-4); }
+.alert-item.alert-critical .alert-count { color:var(--alarm-hi-fg); }
+.alert-item.alert-warning .alert-count { color:var(--alarm-mid-fg); }
 .alert-desc { color:var(--ink-2); font-size:var(--fs-12); margin-top:var(--space-4); }
 .alert-actions { margin-left:auto; display:flex; gap:var(--space-4); flex-shrink:0; }
 /* 次级小按钮：高 24（--ctl-h-sm），字号 12 —— 紧凑控件不套用主按钮的 0.39–0.44 比例 */
@@ -417,7 +583,9 @@ button { cursor:pointer; }
   padding:0 var(--space-8); border:1px solid var(--border); background:var(--surface); color:var(--ink-2);
   border-radius:var(--radius-xs); font-size:var(--fs-12); transition:var(--t-color); }
 .alert-goto:hover { border-color:var(--accent); color:var(--accent); }
-.alert-close:hover { border-color:var(--warn); color:var(--warn-strong); }
+/* 描边走 --warn-strong 而非 --warn：--warn 是本色琥珀，白底 1.66:1，
+   当 1px 描边等于看不见（描边门槛 3:1） */
+.alert-close:hover { border-color:var(--warn-strong); color:var(--warn-strong); }
 
 /* ── KPI 卡 ── */
 .kpi-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:var(--space-8);
@@ -434,10 +602,13 @@ button { cursor:pointer; }
 .kpi-value.pos { color:var(--pos); }
 .kpi-value.neg { color:var(--neg); }
 .kpi-sub { color:var(--ink-3); font-size:var(--fs-12); margin-top:var(--space-4); }
+/* 没有小字的卡（kpi() 传空串）不要留那 4px 空档：否则卡底凭空多一条缝 */
+.kpi-sub:empty { display:none; }
 /* KPI 卡可点击（人员概览 → 跳明细） */
-.kpi-card.clickable { cursor:pointer; transition:var(--t-color); }
-.kpi-card.clickable:hover { border-color:var(--accent); background:var(--surface-2); }
-.kpi-card.clickable:active { background:var(--accent-soft); }
+/* 可点击跳转卡的悬停/按下态与总览 mod-card 完全一致（2026-10-14 用户拍板） */
+.kpi-card.clickable, .seg-card.clickable { cursor:pointer; transition:var(--t-color); }
+.kpi-card.clickable:hover, .seg-card.clickable:hover { background:var(--surface-2); border-color:var(--border-strong); }
+.kpi-card.clickable:active, .seg-card.clickable:active { background:var(--surface-2); border-color:var(--accent); }
 
 /* ── 模块标题（人员概览四大模块） ── */
 .module-head { display:flex; align-items:baseline; gap:var(--space-8); margin:var(--space-16) 0 var(--space-8); }
@@ -447,20 +618,6 @@ button { cursor:pointer; }
   line-height:var(--lh-tight); }
 .module-head h3 .mi { font-size:var(--icon-md); color:var(--accent); }
 .module-head .chart-note { margin-left:auto; }
-
-/* ── 职级下钻面板 ── */
-.drill-head { display:flex; align-items:center; gap:var(--space-8); margin:var(--space-8) 0;
-  padding:var(--space-8); background:var(--surface-2); border:1px solid var(--border);
-  border-radius:var(--radius-sm); flex-wrap:wrap; }
-.drill-crumb { font-size:var(--fs-12); font-weight:var(--fw-semi); }
-.drill-crumb.strong { color:var(--accent); }
-.drill-head .chart-note { margin-left:auto; }
-.drill-chips { display:flex; flex-wrap:wrap; gap:var(--space-8); }
-.drill-chip { display:inline-flex; align-items:center; gap:var(--space-4); height:var(--ctl-h);
-  padding:0 var(--space-16); border:1px solid var(--border); background:var(--surface); color:var(--ink-2);
-  font-size:var(--fs-12); border-radius:var(--radius-pill); cursor:pointer; transition:var(--t-color); }
-.drill-chip:hover { border-color:var(--accent); color:var(--accent); background:var(--surface-2); }
-.drill-count { font-size:var(--fs-12); color:var(--ink-3); font-variant-numeric:tabular-nums; }
 
 /* ── 图表 ── */
 .chart-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(340px,1fr)); gap:var(--space-16);
@@ -483,8 +640,6 @@ button { cursor:pointer; }
    会把「我点的是这条」这个信息抹掉，而且点完立刻换页，按下态根本来不及被看见。
    这里只留 cursor:pointer 表明「这张图可点」。 */
 .chart-box.clickable { cursor:pointer; }
-/* 标题里的纯提示图标（不可点，只是给标题加个记号） */
-.hint-ico { font-size:var(--icon-xs); color:var(--ink-3); }
 /* 名单卡标题栏右侧的导出按钮：靠右由标题的 flex 布局让出，不用内联 margin */
 .list-card h3 .export-btn { margin-left:auto; }
 
@@ -496,12 +651,13 @@ button { cursor:pointer; }
   box-shadow:var(--shadow); cursor:pointer; font:inherit; color:inherit; min-width:0;
   transition:var(--t-color); }
 .mod-card:hover { background:var(--surface-2); border-color:var(--border-strong); }
-.mod-card:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+/* offset 2（不用全局的 1）：卡片带 box-shadow，环贴太近会和影糊在一起 */
+.mod-card:focus-visible { outline-offset:2px; }
 .mod-head { display:flex; align-items:center; gap:var(--space-4); font-size:var(--fs-12);
   font-weight:var(--fw-semi); color:var(--ink-2); }
 .mod-head .mi { font-size:var(--icon-sm); color:var(--ink-3); }
-.mod-badge { font-size:var(--fs-10); line-height:var(--lh-ui); padding:var(--chip-y) var(--chip-x);
-  border-radius:var(--radius-pill); background:var(--surface-2); color:var(--ink-3); border:1px solid var(--border); }
+/* .mod-badge（总览卡片上的「建设中」徽标）已随徽标一并删除（2026-10-21 用户要求：
+   卡片只讲数，不再自报状态）。目标页是不是占位页，由那边自己的页面标题说明。 */
 .mod-num { font-size:var(--fs-24); font-weight:var(--fw-bold); line-height:var(--lh-tight);
   font-variant-numeric:tabular-nums; }
 .mod-num small { font-size:var(--fs-12); font-weight:var(--fw-medium); color:var(--ink-3); margin-left:var(--space-4); }
@@ -513,19 +669,40 @@ button { cursor:pointer; }
   min-height:64px; padding:var(--space-8); } /* min-height 是格子最小高度（几何值），非留白 */
 .nb-cell strong { font-size:var(--fs-20); font-variant-numeric:tabular-nums; }
 .nb-cell .nb-cap { color:var(--ink-3); font-size:var(--fs-12); margin-top:var(--space-4); }
-/* 0 人 = 这一格没有意义 → 退到禁用灰阶。不用 opacity：那会把底色与描边一起洗淡，
-   读起来像「没加载完」而不是「这里就是 0」（G4 禁用 = 退后一档，不是更醒目）。 */
-.nb-cell.empty { color:var(--disabled-fg); }
+/* 0 人 = 这一格没有意义 → 退后一档。不用 opacity：那会把底色与描边一起洗淡，
+   读起来像「没加载完」而不是「这里就是 0」（G4 禁用 = 退后一档，不是更醒目）。
+
+   ⚠️ 2026-10-15 修：原用 --disabled-fg，实测 1.83:1（深色 2.17）——**几乎看不见**。
+   根因是角色错配：--disabled-fg 是给**禁用控件**用的（WCAG 对禁用控件豁免对比度，
+   因为本来就不指望你读它）；而九宫格的空格子是**真实数据**（「这个组合 0 人」是要读的）。
+   换成 --ink-3（浅 4.98 / 深 5.03 ✔）。「安静一档」改由**与常态数字拉开灰阶**表达：
+   有人的格子数字是 --ink（深），空格子是 --ink-3（中灰），一眼仍分得清。 */
+.nb-cell.empty { color:var(--ink-3); }
 .nb-cell.empty .nb-cap { color:inherit; }
 /* ≥15 人 = 九宫格里唯一一处强调，其余格子保持安静 */
 .nb-cell.hot { background:var(--accent-soft); border-color:var(--accent); }
+/* hot 格的底被 --accent-soft 抬亮，--ink-3 的说明文字掉到 4.48（浅）/ 4.45（深），差一点点。
+   抬一档到 --ink-2（浅 5.60 / 深 6.69 ✔）—— 它是唯一的强调格，说明文字跟着抬不算破例。 */
+.nb-cell.hot .nb-cap { color:var(--ink-2); }
 .nb-row-label, .nb-col-label { display:flex; align-items:center; justify-content:center; font-size:var(--fs-12);
   color:var(--ink-3); text-align:center; padding:var(--space-4); }
+/* 列头两行：上=九宫格惯用名，下=它到底对应哪些绩效等级。
+   2026-10-15 加：此前只写「待提升 / 中坚力量 / 绩效之星」，界面上一个字都没说门槛，
+   而 B（合格）被划进「中坚力量」、B- 独占「待提升」——不写门槛没人猜得到。 */
+.nb-col-label { flex-direction:column; gap:2px; }
+/* 上行是名字（抬一档到 --ink-2 + medium），下行是等级门槛（留在 --ink-3、不写字重 = 400）。
+   全站没有 400 档令牌 —— body 不写 font-weight 就是 400，这里同理，别去造一个 --fw-normal。 */
+.nb-col-name { color:var(--ink-2); font-weight:var(--fw-medium); }
+.nb-col-sub { color:var(--ink-3); }
+/* 图注：说清盘点范围与「为什么某一行是 0」。空行看着像坏了，不解释等于让人猜。 */
+.nb-foot { margin-top:var(--space-8); font-size:var(--fs-12); color:var(--ink-3); line-height:var(--lh-body); }
 .nb-axis { font-size:var(--fs-12); color:var(--ink-3); align-self:center; }
 
 /* ── 名单 / 表格 ── */
 .list-card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius);
   padding:var(--space-8) var(--space-16); box-shadow:var(--shadow); }
+/* 多张名单卡竖排堆叠（同页裸排 list-card 无自带间距，与 .chart-grid 的 gap/margin 同节奏） */
+.list-stack { display:grid; gap:var(--space-16); margin-bottom:var(--space-16); }
 .list-card h3 { font-size:var(--fs-14); margin-bottom:var(--space-8); display:flex;
   align-items:center; gap:var(--space-8); }
 .mini-table { width:100%; border-collapse:collapse; font-size:var(--fs-12); }
@@ -536,10 +713,12 @@ button { cursor:pointer; }
 /* mini-table 的滚动容器：高度按「一屏放下 8~10 行」反推，不是留白档位。
    原来三处各写 300/320/520，收敛成一档（.tbl-scroll 是长表的另一档）。 */
 .mini-scroll { overflow:auto; max-height:320px; }
+/* 可跳转行（高潜与快晋升等名单表）：整行点击跳人员明细，hover 提示可点 */
+.mini-table tr.row-jump { cursor:pointer; }
 .mini-table tr:hover td { background:var(--surface-2); }
 /* 行内标记统一形态：淡底 + 同色深字，高度 ≤ 所在行文字高度（内距走 --chip-*） */
 .tag { display:inline-block; padding:var(--chip-y) var(--chip-x); border-radius:var(--radius-xs);
-  font-size:var(--fs-10); line-height:var(--lh-ui); background:var(--surface-2); color:var(--ink-2); }
+  font-size:var(--fs-12); line-height:var(--lh-ui); background:var(--surface-2); color:var(--ink-2); }
 /* 在职=好=红，离职=不好=绿（跟随公司语义） */
 .tag-active { background:var(--tag-on-bg); color:var(--tag-on-fg); }
 .tag-inactive { background:var(--tag-off-bg); color:var(--tag-off-fg); }
@@ -595,7 +774,7 @@ button { cursor:pointer; }
 .ledger-card.wide { grid-column:1 / -1; }
 .ledger-card h3 { font-size:var(--fs-14); margin-bottom:var(--space-8); display:flex;
   align-items:center; gap:var(--space-8); }
-.ledger-card h3 .count-pill { font-size:var(--fs-10); line-height:var(--lh-ui); font-weight:var(--fw-semi);
+.ledger-card h3 .count-pill { font-size:var(--fs-12); line-height:var(--lh-ui); font-weight:var(--fw-semi);
   padding:var(--chip-y) var(--chip-x); border-radius:var(--radius-pill);
   background:var(--accent-soft); color:var(--accent-strong); }
 .row-list { display:flex; flex-direction:column; gap:var(--space-8); }
@@ -606,7 +785,7 @@ button { cursor:pointer; }
 .row-item .ri-name { font-weight:var(--fw-semi); font-size:var(--fs-12); }
 .row-item .ri-meta { color:var(--ink-3); font-size:var(--fs-12); }
 .row-item .ri-note { color:var(--ink-2); font-size:var(--fs-12); margin-top:var(--space-4); line-height:var(--lh-body); }
-.pill { display:inline-block; font-size:var(--fs-10); line-height:var(--lh-ui); padding:var(--chip-y) var(--chip-x);
+.pill { display:inline-block; font-size:var(--fs-12); line-height:var(--lh-ui); padding:var(--chip-y) var(--chip-x);
   border-radius:var(--radius-pill); background:var(--surface); border:1px solid var(--border); color:var(--ink-2); }
 .pill.pill-blue { background:var(--scope-formal-bg); color:var(--scope-formal-fg); border-color:transparent; }
 .pill.pill-cyan { background:var(--scope-intern-bg); color:var(--scope-intern-fg); border-color:transparent; }
@@ -624,8 +803,8 @@ button { cursor:pointer; }
 .emp-toolbar input[type="text"] { flex:1; min-width:200px; max-width:340px; height:var(--ctl-h);
   padding:0 var(--space-8); border:1px solid var(--border); border-radius:var(--radius-sm);
   font-size:var(--fs-12); background:var(--surface); color:var(--ink); }
-/* 同上：不写 outline:none，否则搜索框是明细页唯一没有焦点环的控件 */
-.emp-toolbar input:focus { border-color:var(--accent); }
+/* 同上条：焦点只走全局 1px 环，不再点亮描边——否则是「蓝描边 + 蓝环」两层。
+   这里原本有一条 `input:focus { border-color:var(--accent) }`（2026-10-21 删除）。 */
 .emp-count { color:var(--ink-3); font-size:var(--fs-12); }
 /* 有列筛选在生效时才点亮（原来是写死的 accent 色，没筛选时也亮着，等于一直不亮） */
 .emp-count.active { color:var(--accent); }
@@ -639,8 +818,15 @@ button { cursor:pointer; }
   border-bottom:1px solid var(--baseline); white-space:nowrap; z-index:2; }
 .emp-table-wrap td { padding:var(--space-4) var(--space-8); border-bottom:1px solid var(--gridline); white-space:nowrap; }
 .emp-table-wrap tr:hover td { background:var(--surface-2); }
+/* 点击十字高亮（2026-10-15 全站，grid.js 实现）：点单元格=行+列、点表头=仅列，
+   底色与悬停一致；再点同一格取消。全局类名，任何 table 都生效 */
+tr.xh-row > td { background:var(--surface-2); }
+td.xh-col { background:var(--surface-2); }
 /* 职责描述这类长文本列：宽度由内容与栅格决定（G6），不受间距网格约束 */
 .emp-table-wrap td.wrap { white-space:normal; min-width:160px; max-width:320px; line-height:var(--lh-body); }
+/* 工作内容列：单行截断 + 悬停 title 看全文（2026-10-14 拍板，别把表撑开） */
+.emp-table-wrap td.duty-cell { max-width:260px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  cursor:default; }
 /* .th-sort 的可点样式与 .grid-th 共用一条底座（见「台账表格」一节） */
 /* 序号列不可筛：不给 .th-sort、不给 tabindex、不挂 onclick —— 见 table.js 的 data-nofilter */
 .emp-table-wrap th[data-nofilter] { cursor:default; }
@@ -655,17 +841,22 @@ button { cursor:pointer; }
 /* 分页条 */
 .pg-bar { display:flex; align-items:center; justify-content:center; gap:var(--space-8);
   padding:var(--space-8) 0; font-size:var(--fs-12); }
-/* 其余外形见上面的「原生下拉 / 输入的统一外形」；这里只留紧凑件特有的小圆角 */
+/* 其余外形见上面的「原生下拉 / 输入的统一外形」；这里只留紧凑件特有的小圆角。
+   2026-10-15 起这个类由**自绘按钮**承担（原生件被 .selx-native 藏了，见 core.js enhanceSelects）——
+   .selx-btn 默认 min-width:96px，原生分页下拉约 92px，对得上，不必另开例外。 */
 .pg-select { border-radius:var(--radius-xs); }
 /* 影取 --shadow-pop 而非 --shadow-float：它是**贴着表头长出来**的小面板，
    用浮起层那档影会像浮在半空、和表头脱节（G10「贴着触发器的小面板单独一档、更淡」） */
 .filter-popup { display:none; position:fixed; z-index:var(--z-popup); background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius-sm); box-shadow:var(--shadow-pop); min-width:200px; max-width:300px; overflow:hidden; }
+  border-radius:var(--radius-sm); box-shadow:var(--shadow-pop); min-width:300px; max-width:360px; overflow:hidden; }
+/* 宽度与行距于 2026-10-21 放宽（用户：「下拉菜单好拥挤」）：300→360px，
+   行内距 4/8→8/16、行间隙 4→8。窄版会把「材料科学与工程」这类长值全吃成省略号，
+   而行距 4 时 12px 字的行几乎粘在一起。改这里要连带看 grid.js/fpPlacePopup 的兜底宽度。 */
 /* 筛选值列表（core.js fpRenderList）：日期分组树 + hover「仅筛此项」 */
-.fp-row { display:flex; align-items:center; gap:var(--space-4); padding:var(--space-4) var(--space-8);
+.fp-row { display:flex; align-items:center; gap:var(--space-8); padding:var(--space-8) var(--space-16);
   /* 树形缩进 = 8 基 + 每级 16。原来由 JS 写死 `10 + depth*18`，10 与 18 都不在网格上；
      现在 JS 只给 --fp-depth（层数），缩进量归 CSS 管，改档位不用碰渲染代码。 */
-  padding-left:calc(var(--space-8) + var(--fp-depth, 0) * var(--space-16));
+  padding-left:calc(var(--space-16) + var(--fp-depth, 0) * var(--space-16));
   cursor:pointer; font-size:var(--fs-12); white-space:nowrap; transition:var(--t-color); }
 .fp-row:hover { background:var(--surface-2); }
 /* 「仅筛此项」默认藏起来只是省地方，不是唯一入口：Tab 到它同样出现（见下面的 :focus-within） */
@@ -682,7 +873,7 @@ button { cursor:pointer; }
 
 /* ── 筛选弹窗外壳（core.js fpHeaderHtml 出头部，grid.js / table.js 各出列表与底部）── */
 .fp-head { display:flex; align-items:center; justify-content:space-between;
-  padding:var(--space-4) var(--space-8); border-bottom:1px solid var(--border);
+  padding:var(--space-8) var(--space-16); border-bottom:1px solid var(--border);
   font-size:var(--fs-12); font-weight:var(--fw-semi); }
 /* 关闭不是「淡」而是「退后一档」：走图标控件灰阶（静置 ink-3 → 悬停 ink），不用 opacity（G4） */
 .fp-close { display:inline-flex; align-items:center; color:var(--ink-3); cursor:pointer;
@@ -690,20 +881,22 @@ button { cursor:pointer; }
 .fp-close:hover { color:var(--ink); }
 /* 弹窗内的滚动区。256 不是间距档：它是「够放 8~10 行、又不顶穿视口」反推出来的上限，
    与 grid.js / table.js 里 popup.style.top 的视口钳位是一对，改这里要连带看那两处。 */
-.fp-body { max-height:256px; overflow-y:auto; }
+.fp-body { max-height:288px; overflow-y:auto; }
 .fp-all { border-bottom:1px solid var(--gridline); }
-.fp-count { margin-left:auto; color:var(--ink-3); font-size:var(--fs-10);
+.fp-count { margin-left:auto; color:var(--ink-3); font-size:var(--fs-12);
   font-variant-numeric:tabular-nums; flex-shrink:0; }
 .fp-sort { border-bottom:1px solid var(--border); }
-.fp-sort-btn { display:block; width:100%; text-align:left; padding:var(--space-4) var(--space-8);
+.fp-sort-btn { display:block; width:100%; text-align:left; padding:var(--space-8) var(--space-16);
   border:none; background:none; font-size:var(--fs-12); color:var(--ink);
   cursor:pointer; transition:var(--t-color); }
 .fp-sort-btn:hover { background:var(--surface-2); }
 /* 底部按钮条 gap 取 8 而非就近的 4：两侧都是描边控件，盒子间距就是视觉间距，
    4 会让「清除 / 确定」粘在一起（G8「间距是盒子相等、视觉不相等」的反向情形）。 */
 .fp-foot { display:flex; align-items:center; justify-content:flex-end; gap:var(--space-8);
-  padding:var(--space-4) var(--space-8); border-top:1px solid var(--border); }
-.fp-foot.split { justify-content:space-between; }
+  padding:var(--space-8) var(--space-16); border-top:1px solid var(--border); }
+/* 曾经有过 .fp-foot.stack / .fp-foot-row（四个按钮分两排），
+   随「冻结到此列 / 隐藏本列」两个按钮一起删除（2026-10-15）——
+   现在两张筛选弹窗（员工明细 + grid 列头）都是 2 个按钮一行，无需变体。 */
 
 /* ── 上传页 ── */
 .upload-hero { min-height:calc(100vh - 120px); display:flex; align-items:center; justify-content:center; }
@@ -755,10 +948,18 @@ button { cursor:pointer; }
 table th.grid-th:hover { background:var(--surface-2); }
 /* 旧版写了 .grid-th:hover .grid-funnel{opacity:1} 但没给基准 opacity，
    于是「悬停才显形」从未生效（一直是全亮的 --ink-3）。这里改成**常态淡、悬停加深**：
-   悬停不能是唯一入口（G3），可筛这件事必须一直看得见。 */
-.grid-funnel { font-size:var(--icon-xs); color:var(--border-strong); margin-left:var(--space-4); }
-.grid-th:hover .grid-funnel { color:var(--ink-3); }
+   悬停不能是唯一入口（G3），可筛这件事必须一直看得见。
+
+   ⚠️ 2026-10-15 修：常态色原为 --border-strong，全站扫描实测**只有 1.33:1（浅）/ 1.58:1（深）**，
+   等于没画。原因是角色错配 —— --border-strong 是**画线**用的：1px 描边靠「有 / 没有」被看见，
+   不靠它自己醒目；而这枚是 14px 图标，靠形状传达「此列可筛」，属 UI 图标档，要 3:1。
+   换成 --ink-3（--surface 上 5.56 ✔、悬停底 --surface-2 上 4.98 ✔）。
+   「常态淡」改由**比悬停浅一档**表达（常态 --ink-3 → 悬停 --ink-2），不靠压到看不清。 */
+.grid-funnel { font-size:var(--icon-xs); color:var(--ink-3); margin-left:var(--space-4); }
+.grid-th:hover .grid-funnel { color:var(--ink-2); }
 .grid-th.grid-filtered .grid-funnel { color:var(--accent); }
+/* 通用排序的方向箭头（激活列表头，明细表 empSortState 箭头同款；入口在筛选弹窗 fp-sort） */
+.grid-sort-arrow { font-size:var(--icon-xs); color:var(--accent); margin-left:2px; }
 
 /* ── grid.js v2：冻结到任意行列 + 多选隐藏（2026-09-13 优化：行/列分离边线）── */
 .grid-frozen-cell { background:var(--surface) !important; }
@@ -766,28 +967,16 @@ table th.grid-th:hover { background:var(--surface-2); }
 .grid-frozen-col { box-shadow:inset -1px 0 0 var(--baseline); }
 .grid-frozen-corner { background:var(--surface-2) !important;
   box-shadow:inset -1px 0 0 var(--baseline), inset 0 -1px 0 var(--baseline); }
-.grid-sel-row td { background:var(--accent-soft) !important; }
-.grid-sel-col { background:var(--accent-soft) !important; }
+/* 选中底色走 --sel-bg（不透明）。用 --accent-soft 会让冻结列把下面滚过去的列透出来 */
+.grid-sel-row td { background:var(--sel-bg) !important; }
+.grid-sel-col { background:var(--sel-bg) !important; }
 /* 禁用项走禁用色档，不用 opacity 表达「淡」；图标字形与确认弹窗承担破坏性预警，不上语义色 */
 .grid-menu-item.disabled { color:var(--disabled-fg); cursor:default; pointer-events:none; }
 
-/* 悬浮工具条 */
-#gridBar { display:none; position:fixed; z-index:var(--z-bar); align-items:center; gap:var(--space-4);
-  padding:var(--space-4) var(--space-8); background:var(--surface); border:1px solid var(--border);
-  border-radius:var(--radius-sm); box-shadow:var(--shadow-float); font-size:var(--fs-12); }
-#gridBar .gb-label { color:var(--ink-2); font-weight:var(--fw-semi); }
-#gridBar .gb-sel { height:var(--ctl-h-sm); padding:0 var(--space-4); border:1px solid var(--border);
-  border-radius:var(--radius-xs); background:var(--surface); color:var(--ink); font-size:var(--fs-12); }
-#gridBar .gb-btn { display:inline-flex; align-items:center; height:var(--ctl-h-sm); padding:0 var(--space-8);
-  border:1px solid var(--border); background:var(--surface); color:var(--ink-2);
-  border-radius:var(--radius-xs); cursor:pointer; font-size:var(--fs-12); transition:var(--t-color); }
-#gridBar .gb-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
-#gridBar .gb-btn.on { background:var(--accent-soft); border-color:var(--accent); color:var(--accent);
-  font-weight:var(--fw-semi); }
-#gridBar .gb-btn.primary:not(:disabled) { background:var(--accent-fill); border-color:var(--accent-fill); color:var(--on-accent); }
-#gridBar .gb-btn:disabled { color:var(--disabled-fg); border-color:var(--disabled-border); cursor:default; }
-#gridBar .gb-sep { width:1px; height:var(--space-16); background:var(--border); }
-#gridBar .gb-note { color:var(--ink-3); font-size:var(--fs-12); }
+/* 悬浮多选条 #gridBar 已整体下线（2026-10-21）：
+   隐藏 / 恢复走**表头与行上的右键菜单**，无模式时也能用；每张表另有常驻工具栏
+   `.grid-tb`（搜索 / 隐藏所选 / 恢复隐藏 / CSV / 分页）。
+   勾选框列**不是常驻的**：只在「右键 → 多选隐藏…」进入多选模式时临时挂出，退出即整列删除。 */
 
 /* 右键菜单 */
 #gridMenu { display:none; position:fixed; z-index:var(--z-menu); min-width:210px; background:var(--surface);
@@ -800,11 +989,60 @@ table th.grid-th:hover { background:var(--surface-2); }
 #gridMenu .grid-menu-item:hover .mi { color:var(--accent); }
 #gridMenu .grid-menu-sep { height:1px; background:var(--gridline); margin:var(--space-4) var(--space-8); }
 
-/* 多选模式：行首勾选框（塞在第一格内，不动列结构） */
-.grid-cbx, .grid-cbx-all { width:var(--icon-xs); height:var(--icon-xs); margin-right:var(--space-4);
-  accent-color:var(--accent); cursor:pointer; vertical-align:middle; flex:none; }
-th .grid-cbx-all { margin-right:0; }
-.grid-selmode tbody { user-select:none; }
+/* ── 多选模式的勾选框列（2026-10-21）────────────────────────────────
+   ⚠️ 只在「右键 → 多选隐藏…」进入行模式时临时出现，退出即整列删除。
+   2026-10-21 用户否掉了常驻方案（不好看）与拖拽选区（按住拖是在选文字）。
+   列宽 32px = 勾选框 14 + 左右各 9，命中区就是一整格（行高 ≈ 28px），不用再套 label 扩热区。 */
+.grid-selth, .grid-selcell { width:32px; min-width:32px; max-width:32px; padding:0 !important;
+  text-align:center; background:var(--surface); }
+.grid-selth { z-index:6; }
+.grid-selcell { cursor:pointer; }
+/* 粘在最左的那一列要自带右边线：border-collapse 的格线在 sticky 下会跟着滚走 */
+.grid-selth, .grid-selcell { box-shadow:inset -1px 0 0 var(--gridline); }
+.grid-selcell:hover { background:var(--surface-2); }
+.grid-sel-row .grid-selcell { background:var(--sel-bg); }
+/* 自绘勾选框：原生控件在高分屏上又小又糊，且和站内 --radius 体系对不上 */
+.grid-cbx, .grid-cbx-all { appearance:none; -webkit-appearance:none; margin:0; padding:0;
+  width:14px; height:14px; border:1.5px solid var(--border-strong); border-radius:3px;
+  background:var(--surface); cursor:pointer; position:relative; vertical-align:middle;
+  transition:background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
+.grid-cbx:hover, .grid-cbx-all:hover { border-color:var(--accent); }
+.grid-cbx:checked, .grid-cbx-all:checked, .grid-cbx:indeterminate, .grid-cbx-all:indeterminate {
+  background:var(--accent-fill); border-color:var(--accent-fill); }
+/* 对勾用两条边框画，不引字体图标：伪元素里的 ligature 字号一改就错位 */
+.grid-cbx:checked::after, .grid-cbx-all:checked::after { content:''; position:absolute;
+  left:3.5px; top:0.5px; width:4px; height:7.5px;
+  border:solid var(--on-accent); border-width:0 1.8px 1.8px 0; transform:rotate(45deg); }
+.grid-cbx:indeterminate::after, .grid-cbx-all:indeterminate::after { content:''; position:absolute;
+  left:2px; top:5.2px; width:8px; height:1.8px; background:var(--on-accent); }
+/* 鼠标事件交给外面那一格：勾选框自己若还接指针，浏览器的原生激活会在 mouseup 之后
+   再发一次 change，和 grid.js 的「按下拖 / 抬起切」互相抵消（点一下 = 选了又取消）。
+   键盘不受影响：pointer-events 只管指针，Tab + 空格照旧走 input 自己的 change。 */
+.grid-selcell .grid-cbx, .grid-selth .grid-cbx-all { pointer-events:none; }
+
+/* ── 表格工具栏（每张数据表上方一条，2026-10-21）────────────────────
+   构成：搜索 · 已选计数 · 隐藏所选 · 恢复隐藏 · 导出 CSV ／ 分页（右侧）。
+   与 .tbl-scroll 之间留 8px，避免工具条和表头粘成一块。 */
+.grid-tb { display:flex; align-items:center; gap:var(--space-8); flex-wrap:wrap;
+  margin-bottom:var(--space-8); font-size:var(--fs-12); }
+.grid-tb .gtb-left { display:flex; align-items:center; gap:var(--space-8); flex:1 1 auto; min-width:0; }
+.grid-tb .gtb-search { width:180px; height:var(--ctl-h-sm); border-radius:var(--radius-xs); }
+.grid-tb .gtb-count { color:var(--ink-3); white-space:nowrap; }
+.grid-tb .gtb-count.on { color:var(--accent); font-weight:var(--fw-semi); }
+/* 外形复用 .tb-btn（同一个按钮 chrome），这里只留紧凑档的四处差异 */
+.grid-tb .gtb-btn { gap:var(--space-4); height:var(--ctl-h-sm);
+  padding:0 var(--space-8); border-radius:var(--radius-xs);
+  font-size:var(--fs-12); white-space:nowrap; }
+.grid-tb .gtb-btn .mi { font-size:var(--icon-sm); color:var(--ink-3); }
+.grid-tb .gtb-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); }
+.grid-tb .gtb-btn:hover:not(:disabled) .mi { color:var(--accent); }
+.grid-tb .gtb-btn:disabled { color:var(--disabled-fg); border-color:var(--disabled-border); cursor:default; }
+.grid-tb .gtb-btn:disabled .mi { color:var(--disabled-fg); }
+.grid-tb .gtb-page { display:flex; align-items:center; gap:var(--space-8); margin-left:auto; }
+.grid-tb .gtb-page-n { color:var(--ink-2); white-space:nowrap; font-variant-numeric:tabular-nums; }
+.grid-tb .gtb-size { height:var(--ctl-h-sm); padding:0 var(--space-4); border:1px solid var(--border);
+  border-radius:var(--radius-xs); background:var(--surface); color:var(--ink-2);
+  font-family:var(--font); font-size:var(--fs-12); }
 
 /* ── 建设中占位页 ── */
 .ph-card { max-width:440px; margin:var(--space-48) auto; text-align:center; background:var(--surface);
@@ -825,11 +1063,8 @@ th .grid-cbx-all { margin-right:0; }
 .seg-switch button:not(.on):hover { color:var(--accent); background:var(--accent-soft); }
 .seg-switch button:disabled { color:var(--disabled-fg); cursor:not-allowed; }
 .seg-switch button:disabled:not(.on):hover { color:var(--ink-2); background:transparent; }
-/* 异动页一行两个开关：人群 · 统计窗口 */
-.win-row .seg-switch + .win-label { margin-left:var(--space-16); }
+/* 异动页统计窗口开关所在行（注记自 2026-10-26 起移到 .module-head，这里只剩开关） */
 .win-row { display:flex; align-items:center; gap:var(--space-8); margin:0 0 var(--space-8); flex-wrap:wrap; }
-.win-row .win-label { font-size:var(--fs-12); color:var(--ink-3); }
-.win-row .chart-note { margin-left:auto; }
 
 /* ── 人员概览 · 结构分布分组标题 ── */
 .struct-sub { font-size:var(--fs-12); font-weight:var(--fw-semi); color:var(--ink-3);
@@ -864,22 +1099,53 @@ th .grid-cbx-all { margin-right:0; }
    交互状态层（G4）：状态组齐全 + 悬停总则「浅底加深、深底变浅」
    —— 悬停只改底色，不上浮、不加悬停影；按下取「松手后会变成的样子」。
    ═══════════════════════════════════════════════════════════════════════════ */
-/* 键盘焦点可见：鼠标点击不出轮廓，Tab 导航出轮廓 */
-:focus-visible { outline:2px solid var(--accent); outline-offset:1px; border-radius:var(--radius-xs); }
+/* 键盘焦点可见：鼠标点击不出轮廓，Tab 导航出轮廓。
+   粗细 2026-10-15 由 2px 收到 **1px**（用户反馈「粗环，太丑了」，从「焦点环方案对比.png」挑的细档）。
+   ⚠️ **别写成 1.5px**：Chromium 把 outline-width 栅格化到整数 CSS 像素，写 1.5px 在 DPR 1 / 1.25 / 1.5 / 2
+   下**一律渲染成 1px**（实测，见 `probe-ring-dpr.js`），只会让源码和画面说的不是一回事。
+   真想要半像素只有 `box-shadow: 0 0 0 1.5px` 能表达——但它会和元素自身的 --shadow 打架，不值当。
+   **不写 border-radius**：outline 自 Chrome 94 起自动跟随控件自身的圆角；
+   早先那句 `border-radius:var(--radius-xs)` 会把按钮（8px）、卡片（12px）的圆角**压成 4px**，
+   聚焦瞬间形状突变——这是个 bug，随本次换档一并删掉。 */
+:focus-visible { outline:1px solid var(--accent); outline-offset:1px; }
+/* offset 0：汉堡按钮贴着顶栏边缘，往外让 1px 环会被容器裁掉 */
 .hamburger:focus-visible { outline-offset:0; }
+/* ── 例外②：原生日期框必须退到 :focus-within ──
+   Chromium 把 Tab 进 input[type=date] 的焦点放进控件内部的 shadow 字段里，
+   **宿主自身不匹配 :focus**（实测 matches(':focus') === false，见 probe-ring.js ①b），
+   于是上面那条全局 :focus-visible 对它完全不生效 —— 键盘用户 Tab 到日期框时
+   **看不到任何焦点指示**（2026-10-15 由 Tab 扫描发现）。退到 :focus-within 才命中：
+   宿主「内部有」聚焦字段。副作用是鼠标点日期框也会出环，接受 —— 它本来就没有任何焦点指示。
+
+   ⚠️ 日期框是**有意保留原生**的一处（P16 明确允许：日期面板属于「确实要留原生的」）。
+   同页其它原生件（<select>）2026-10-15 已全部换成自绘 .selx，只剩它。
+   保留理由：自绘日历要重做月历网格 + 年月翻页 + 键盘导航 + 中文本地化，
+   收益只有「面板配色统一」；而 Chromium 自带的日期面板本来就跟随系统主题、键盘可用。
+   代价是这一条 :focus-within 特例得留着 —— 除非哪天真的自绘日历，否则别删。 */
+.filter-bar input[type=date]:focus-within { outline:1px solid var(--accent); outline-offset:1px; }
 /* 按下态统一：与 hover 同语言再深一档（只改底色，无位移无投影） */
 .nav-item:active, .nav-group-head:active, .side-theme:active { background:var(--sidebar-active); color:var(--sidebar-text-active); }
 .tb-btn:active { background:var(--surface-2); }
-.tb-btn.primary:active { background:var(--accent); border-color:var(--accent); }
-.alert-goto:active, .alert-close:active, .drill-chip:active,
-#gridBar .gb-btn:active:not(:disabled), #gridMenu .grid-menu-item:active { background:var(--surface-2); }
+/* 按下取「松手后会变成的样子」= 鼠标仍在按钮上 → 就是悬停态，故与 hover 同值 */
+.tb-btn.primary:active { background:var(--accent-fill-hover); border-color:var(--accent-fill-hover); }
+.alert-goto:active, .alert-close:active,
+#gridMenu .grid-menu-item:active { background:var(--surface-2); }
 .seg-switch button:not(.on):active { background:var(--surface-2); color:var(--accent); }
 /* 行级元素按下用底色（不整体缩放，免得内容破碎） */
 .fp-row:active { background:var(--accent-soft); }
 .mod-card:active { background:var(--surface-2); border-color:var(--accent); }
+/* hover 已经用掉最深的中性底（--surface-2）时，往中性方向没有下一档了 ——
+   按下的「已接手」信号改用强调色：带描边的控件走 --accent 描边，行/文字类走 --accent-soft 底。
+   图标控件（.fp-close）不变色相，改走中性底 + 圆角（§5.4「只加深，不变色相」）。 */
+.nav-sec-head:active { background:var(--sidebar-active); color:var(--sidebar-text-active); }
+.selx-btn:active { background:var(--surface-2); border-color:var(--accent); }
+.alert-toggle:active, .fp-sort-btn:active { background:var(--accent-soft); }
+.link-btn:active { color:var(--accent-strong); background:var(--accent-soft); border-radius:var(--radius-xs); }
+.fp-close:active { background:var(--surface-2); border-radius:var(--radius-xs); }
 /* 「仅筛此项」键盘可达：Tab 时不再只靠 hover */
 .fp-row:focus-within .fp-only { visibility:visible; }
-.fp-only:focus-visible { outline:1px solid var(--accent); outline-offset:2px; border-radius:var(--radius-xs); }
+/* offset 2：弹窗行内的小按钮，周围留白少，环离远一点才看得出（粗细继承全局） */
+.fp-only:focus-visible { outline-offset:2px; }
 
 /* ═══════════════════════════════════════════════════════════════════════════
    动效层（G5）：先答「该不该动」，再谈怎么做。
@@ -903,7 +1169,7 @@ th .grid-cbx-all { margin-right:0; }
 .page:not(.hidden) > *:nth-child(n+6) { animation-delay:120ms; }
 
 /* 浮层入场：从 scale(.95~.97) + 透明出现（不从 scale(0)——没有东西是从「不存在」里冒出来的） */
-.filter-popup, #gridMenu, #gridBar { transform-origin:top; animation:ds-pop var(--dur-base) var(--ease-out) both; }
+.filter-popup, #gridMenu, .selx-menu { transform-origin:top; animation:ds-pop var(--dur-base) var(--ease-out) both; }
 
 /* 动效降级：减少动效不是取消反馈——位移 / 缩放降级成短淡入，而不是什么都不发生 */
 @media (prefers-reduced-motion: reduce) {
@@ -912,5 +1178,16 @@ th .grid-cbx-all { margin-right:0; }
     animation-iteration-count:1 !important; transition-duration:var(--dur-fast) !important;
     scroll-behavior:auto !important;
   }
-  .page:not(.hidden) > *, .filter-popup, #gridMenu, #gridBar { animation-name:ds-fade !important; }
+  .page:not(.hidden) > *, .filter-popup, #gridMenu, .selx-menu { animation-name:ds-fade !important; }
 }
+
+/* ═══ 区间离职率对比（2026-10-15）：近10年+今年至今 小卡排（自定义起止区间已删）═══
+   分组标题走 .module-head（与人员概览统一），这里只管卡排本身 */
+/* 一排固定 5 张（10 张=两行整，2026-10-15 用户拍板），窄屏自动降到 3 列 */
+.range-row { display:grid; grid-template-columns:repeat(5,1fr); gap:var(--space-8); margin-bottom:var(--space-8); }
+@media (max-width:1100px) { .range-row { grid-template-columns:repeat(3,1fr); } }
+/* 卡体与文字层级全部复用 .kpi-card / .kpi-value / .kpi-sub（见 看板 的 renderRangeCompare），
+   这里只写两者真正不同的两条：圆角大一档、内距大一档。
+   曾经另立 .range-rate / .range-label，与 .kpi-value / .kpi-sub 逐字相同 —— 删掉，
+   免得改 --fs-24 或「--neg 只作大字」那条规则时要改两处。 */
+.range-card { border-radius:var(--radius-lg); padding:var(--space-16); }
